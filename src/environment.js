@@ -72,34 +72,37 @@ export class Environment {
     body.receiveShadow = true;
     pencilGroup.add(body);
 
-    // 2. Sharpened exposed wood cone (natural basswood/cedar inner grain)
-    const coneLength = 0.18; // ~20mm
-    const tipWoodGeom = new THREE.ConeGeometry(pencilR, coneLength, 16);
-    tipWoodGeom.rotateZ(Math.PI / 2); // apex points left (-X), base faces right (+X) flush against body
+    // 2. Sharpened exposed wood taper (natural basswood inner grain)
+    // Real sharpened pencils taper from body radius (pencilR) down to lead radius (leadR)
+    const woodLength = 0.16; // ~18mm taper length
+    const leadR = 0.009; // graphite core radius (~1.8mm diameter / 2)
+    const tipWoodGeom = new THREE.CylinderGeometry(leadR, pencilR, woodLength, 16);
+    tipWoodGeom.rotateZ(Math.PI / 2); // left end is leadR (radiusTop), right end is pencilR (radiusBottom)
     const tipWoodMat = new THREE.MeshStandardMaterial({
       color: 0xf3dfc1,
       roughness: 0.75,
     });
     const tipWood = new THREE.Mesh(tipWoodGeom, tipWoodMat);
-    tipWood.position.set(-bodyLength / 2 - coneLength / 2, 0, 0);
+    // Align right end with bodyLeft (-bodyLength / 2)
+    tipWood.position.set(-bodyLength / 2 - woodLength / 2, 0, 0);
     tipWood.castShadow = true;
     tipWood.receiveShadow = true;
     pencilGroup.add(tipWood);
 
-    // 3. Graphite lead core tip (sharpened nib protruding clearly past wood point)
-    const leadLength = 0.045; // ~4.5mm
-    const leadR = 0.009; // ~1.8mm diameter / 2
+    // 3. Graphite lead core tip (sharpened nib seamlessly emerging from the wood taper)
+    const leadLength = 0.035; // ~3.8mm exposed lead cone
     const leadGeom = new THREE.ConeGeometry(leadR, leadLength, 16);
-    leadGeom.rotateZ(Math.PI / 2); // apex points left (-X)
+    leadGeom.rotateZ(Math.PI / 2); // apex points left (-X), base faces right (+X) matching woodLeft
     const leadMat = new THREE.MeshStandardMaterial({
       color: 0x18181c,
       roughness: 0.3,
-      metalness: 0.3,
+      metalness: 0.25,
     });
     const lead = new THREE.Mesh(leadGeom, leadMat);
-    // Wood tip apex is at: -bodyLength / 2 - coneLength (-0.805)
-    // Protrude lead apex to -0.835, embedding base at -0.790
-    lead.position.set(-bodyLength / 2 - coneLength - 0.0125, 0, 0);
+    // Wood taper left end is at: -bodyLength / 2 - woodLength (-0.785)
+    // Base is slightly embedded (1mm) for a rock-solid seamless connection
+    const woodLeftX = -bodyLength / 2 - woodLength;
+    lead.position.set(woodLeftX - leadLength / 2 + 0.001, 0, 0);
     lead.castShadow = true;
     lead.receiveShadow = true;
     pencilGroup.add(lead);
