@@ -75,7 +75,7 @@ export class Environment {
     // 2. Sharpened exposed wood cone (natural basswood/cedar inner grain)
     const coneLength = 0.18; // ~20mm
     const tipWoodGeom = new THREE.ConeGeometry(pencilR, coneLength, 16);
-    tipWoodGeom.rotateZ(-Math.PI / 2); // points left (-X)
+    tipWoodGeom.rotateZ(Math.PI / 2); // apex points left (-X), base faces right (+X) flush against body
     const tipWoodMat = new THREE.MeshStandardMaterial({
       color: 0xf3dfc1,
       roughness: 0.75,
@@ -86,19 +86,22 @@ export class Environment {
     tipWood.receiveShadow = true;
     pencilGroup.add(tipWood);
 
-    // 3. Graphite lead core tip
-    const leadLength = 0.035; // ~3.8mm
-    const leadR = 0.0095; // ~2.1mm diameter / 2
-    const leadGeom = new THREE.ConeGeometry(leadR, leadLength, 12);
-    leadGeom.rotateZ(-Math.PI / 2); // points left (-X)
+    // 3. Graphite lead core tip (sharpened nib protruding clearly past wood point)
+    const leadLength = 0.045; // ~4.5mm
+    const leadR = 0.009; // ~1.8mm diameter / 2
+    const leadGeom = new THREE.ConeGeometry(leadR, leadLength, 16);
+    leadGeom.rotateZ(Math.PI / 2); // apex points left (-X)
     const leadMat = new THREE.MeshStandardMaterial({
-      color: 0x1f1f22,
-      roughness: 0.25,
-      metalness: 0.2,
+      color: 0x18181c,
+      roughness: 0.3,
+      metalness: 0.3,
     });
     const lead = new THREE.Mesh(leadGeom, leadMat);
-    lead.position.set(-bodyLength / 2 - coneLength + leadLength / 2 - 0.002, 0, 0);
+    // Wood tip apex is at: -bodyLength / 2 - coneLength (-0.805)
+    // Protrude lead apex to -0.835, embedding base at -0.790
+    lead.position.set(-bodyLength / 2 - coneLength - 0.0125, 0, 0);
     lead.castShadow = true;
+    lead.receiveShadow = true;
     pencilGroup.add(lead);
 
     // 4. Aluminum ferrule (brass / silver metal band with crimp rings)
