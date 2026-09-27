@@ -83,11 +83,11 @@ export class TrebuchetModel {
     });
     // Paper-craft stage: flat white paper
     this.paperMat = new THREE.MeshStandardMaterial({
-      color: 0xf5f0e8, roughness: 0.85, metalness: 0.0,
+      color: 0xf5f0e8, roughness: 0.85, metalness: 0.0, side: THREE.DoubleSide,
     });
     // White model stage: matte white
     this.whiteMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff, roughness: 0.5, metalness: 0.0,
+      color: 0xffffff, roughness: 0.5, metalness: 0.0, side: THREE.DoubleSide,
     });
 
     this.chassis = new THREE.Group();
@@ -131,6 +131,21 @@ export class TrebuchetModel {
     this.group.add(this.chassis);
     this.group.add(this.armPivot);
     this.scene.add(this.group);
+
+    // Save original materials for smooth morph transitions
+    this.group.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.userData.origMaterial = obj.material;
+      }
+    });
+
+    // Dynamic blend material for seamless transitions
+    this.blendMat = new THREE.MeshStandardMaterial({
+      color: 0xf5f0e8,
+      roughness: 0.85,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+    });
 
     this.setPullAngle(0);
   }
@@ -342,49 +357,38 @@ export class TrebuchetModel {
     // a second coincident pin here: duplicate cylinders were the source of
     // the residual/ghosting around the pivot.
 
-    // 2. Wooden cup/bowl — hemisphere shell, rim flush with arm top, right wall at arm tip
-    const cupGeom = new THREE.SphereGeometry(cupR, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-    cupGeom.rotateX(Math.PI); // dome -> bowl opening upward
-    this.cupMesh = new THREE.Mesh(cupGeom, new THREE.MeshStandardMaterial({
-      color: 0x8a6745, roughness: 0.75, side: THREE.DoubleSide,
-    }));
-    // Rim (equator) at y=0.021 = arm top; right edge at x=-LONG_ARM = arm tip
+    // 2. Wooden cup/bowl (3D 半球木托) — single solid closed manifold mesh with real physical thickness.
+    // Seamlessly integrates the inner ball cavity and the outer wooden shell into one solid piece.
+    // Outward-facing normals everywhere prevent hollow/transparent culling artifacts from any viewing angle.
+    const cradleThick = 0.020;
+    const cradleOuterR = cupR + cradleThick;
+
+    const bowlPoints = [];
+    const arcSegs = 20;
+    // Outer profile: from bottom center (0, -cradleOuterR) up to outer rim (cradleOuterR, 0)
+    for (let i = 0; i <= arcSegs; i++) {
+      const a = -Math.PI / 2 + (Math.PI / 2) * (i / arcSegs);
+      bowlPoints.push(new THREE.Vector2(
+        Math.max(0, cradleOuterR * Math.cos(a)),
+        cradleOuterR * Math.sin(a)
+      ));
+    }
+    // Inner profile: from inner rim (cupR, 0) down to inner bowl floor (0, -cupR)
+    for (let i = arcSegs; i >= 0; i--) {
+      const a = -Math.PI / 2 + (Math.PI / 2) * (i / arcSegs);
+      bowlPoints.push(new THREE.Vector2(
+        Math.max(0, cupR * Math.cos(a)),
+        cupR * Math.sin(a)
+      ));
+    }
+
+    const cupGeom = new THREE.LatheGeometry(bowlPoints, 36);
+    this.cupMesh = new THREE.Mesh(cupGeom, w);
     this.cupMesh.position.set(cupCenterX, 0.021, 0);
     this.cupMesh.rotation.z = cupTilt;
     this.cupMesh.castShadow = true;
     this.cupMesh.receiveShadow = true;
     this.armPivot.add(this.cupMesh);
-
-    // Wooden cradle — hemispherical shell wrapping the entire outside of the bowl bottom.
-    // Wall thickness = 0.020, matching the arm's outerOffset.
-    const cradleThick = 0.020;
-    const cradleOuterR = cupR + cradleThick;
-    const cradlePivot = new THREE.Group();
-    cradlePivot.position.set(cupCenterX, 0.021, 0);
-    cradlePivot.rotation.z = cupTilt;
-
-    // Outer hemisphere (bottom half of sphere) — wraps bowl bottom, flush with rim, does not block bowl opening
-    const cradleOuter = new THREE.Mesh(
-      new THREE.SphereGeometry(cradleOuterR, 28, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
-      w
-    );
-    cradleOuter.castShadow = true;
-    cradleOuter.receiveShadow = true;
-    cradlePivot.add(cradleOuter);
-
-    // Flat annular rim disc — lies in the equatorial plane (y=0 local),
-    // spanning from bowl rim (cupR) to outer shell (cradleOuterR).
-    // This makes the wooden cradle visually flush with the bowl opening.
-    const rimDisc = new THREE.Mesh(
-      new THREE.RingGeometry(cupR, cradleOuterR, 40),
-      w
-    );
-    rimDisc.rotation.x = -Math.PI / 2; // RingGeometry is XY-plane → rotate to XZ-plane (horizontal)
-    rimDisc.castShadow = true;
-    rimDisc.receiveShadow = true;
-    cradlePivot.add(rimDisc);
-
-    this.armPivot.add(cradlePivot);
 
     // 3. Counterweight assembly — a wooden bearing seat at the arm end
     // carries one transverse pin shared by both hanger links.
@@ -548,26 +552,67 @@ export class TrebuchetModel {
     return this.cwWorldPos;
   }
 
-  // Multi-stage morph: 0=sketch(hidden), 0.33=paper, 0.66=white, 1.0=textured
+  // Multi-stage morph:
+  // f = 0: hidden
+  // f in (0, 0.33]: Paper 3D model
+  // f in (0.33, 0.66]: Paper -> Pure Gray-White clay model (smooth color & roughness interpolation)
+  // f in (0.66, 1.0]: Gray-White -> Full Textured 3D model (gradual texture & color reveal)
   setMorphFactor(f) {
-    f = Math.max(0.0, f);
-    // Show/hide 3D model based on stage
-    this.group.visible = f > 0.05;
-    this.group.scale.set(1, 1, 1);
+    f = Math.max(0.0, Math.min(1.0, f));
+    this.group.visible = f > 0.02;
 
-    // Apply material based on stage
-    let mat = this.woodMat;
-    if (f < 0.34) mat = this.paperMat;
-    else if (f < 0.67) mat = this.whiteMat;
+    const paperColor = new THREE.Color(0xf5f0e8);
+    const whiteColor = new THREE.Color(0xebebeb);
+    const woodBaseColor = new THREE.Color(0xe6cdab);
 
-    // Swap wood materials
-    this.group.traverse((obj) => {
-      if (obj.isMesh) {
-        if (obj.material === this.woodMat || obj.material === this.darkWoodMat ||
-          obj.material === this.paperMat || obj.material === this.whiteMat) {
-          obj.material = mat;
+    if (f <= 0.33) {
+      // Stage: Pure Paper Model
+      const scaleZ = Math.min(1.0, 0.2 + (f / 0.33) * 0.8);
+      this.group.scale.set(1, 1, scaleZ);
+      this.group.traverse((obj) => {
+        if (obj.isMesh) {
+          obj.material = this.paperMat;
         }
+      });
+    } else if (f <= 0.66) {
+      // Stage: Paper -> Gray-White Model (smooth blend)
+      this.group.scale.set(1, 1, 1);
+      const t = (f - 0.33) / (0.66 - 0.33);
+      this.blendMat.color.copy(paperColor).lerp(whiteColor, t);
+      this.blendMat.roughness = THREE.MathUtils.lerp(0.85, 0.70, t);
+      this.blendMat.metalness = 0.0;
+      this.blendMat.map = null;
+      this.blendMat.needsUpdate = true;
+
+      this.group.traverse((obj) => {
+        if (obj.isMesh) {
+          obj.material = this.blendMat;
+        }
+      });
+    } else {
+      // Stage: Gray-White -> Full Textured 3D Model
+      this.group.scale.set(1, 1, 1);
+      const t = (f - 0.66) / (1.0 - 0.66);
+      if (t >= 0.96) {
+        // Fully restore original materials with wood textures, metallic pins, clear box
+        this.group.traverse((obj) => {
+          if (obj.isMesh && obj.userData.origMaterial) {
+            obj.material = obj.userData.origMaterial;
+          }
+        });
+      } else {
+        // Smoothly blend color towards wood tone before full texture restore
+        this.blendMat.color.copy(whiteColor).lerp(woodBaseColor, t);
+        this.blendMat.roughness = THREE.MathUtils.lerp(0.70, 0.65, t);
+        this.blendMat.metalness = t * 0.05;
+        this.blendMat.map = null;
+        this.blendMat.needsUpdate = true;
+        this.group.traverse((obj) => {
+          if (obj.isMesh) {
+            obj.material = this.blendMat;
+          }
+        });
       }
-    });
+    }
   }
 }

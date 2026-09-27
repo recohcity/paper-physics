@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class Environment {
-  constructor(scene, woodTableTexture, paperTexture) {
+  constructor(scene, woodTableTexture, paperTexture, paperCleanTexture) {
     this.scene = scene;
 
     // 1. Wooden Desk Table Top
@@ -19,11 +19,18 @@ export class Environment {
 
     // 2. White Paper Sheet — thin box with visible edge, casts real shadow
     const paperT = 0.006;
+    this.paperSketchTexture = paperTexture;
+    this.paperCleanTexture = paperCleanTexture || paperTexture;
+    this._paperSketchVisible = true;
+
     this.paperMat = new THREE.MeshStandardMaterial({
-      map: paperTexture, roughness: 0.9, metalness: 0.0,
+      map: this.paperSketchTexture,
+      roughness: 0.9,
+      metalness: 0.0,
     });
     const paperSideMat = new THREE.MeshStandardMaterial({
-      color: 0xf0ebe0, roughness: 0.9,
+      color: 0xf0ebe0,
+      roughness: 0.9,
     });
     this.paperMesh = new THREE.Mesh(
       new THREE.BoxGeometry(2.7, paperT, 1.85),
@@ -33,12 +40,6 @@ export class Environment {
     this.paperMesh.receiveShadow = true;
     this.paperMesh.castShadow = true;
     this.scene.add(this.paperMesh);
-
-    // Plain white paper (for after sketch is "built up")
-    this.plainPaperMat = new THREE.MeshStandardMaterial({
-      color: 0xfaf8f3, roughness: 0.9, metalness: 0.0,
-    });
-    this._paperSketchVisible = true;
 
 
     // 3. Wooden Pencil lying on paper (matching screenshot 1)
@@ -148,14 +149,14 @@ export class Environment {
   }
 
   hidePaperSketch() {
-    if (!this._paperSketchVisible) return;
     this._paperSketchVisible = false;
-    this.paperMesh.material[2] = this.plainPaperMat;
+    this.paperMat.map = this.paperCleanTexture;
+    this.paperMat.needsUpdate = true;
   }
 
   showPaperSketch() {
-    if (this._paperSketchVisible) return;
     this._paperSketchVisible = true;
-    this.paperMesh.material[2] = this.paperMat;
+    this.paperMat.map = this.paperSketchTexture;
+    this.paperMat.needsUpdate = true;
   }
 }

@@ -212,20 +212,7 @@ export class TrajectoryAnnotations {
     this.ctx.clearRect(0, 0, this.width, this.height);
     if (!this.enabled) return;
 
-    // 1. Draw Reference Trajectory Arcs matching user's Image 1
-    if (this.showTrajectories) {
-      // 0.48 kg (falls short)
-      const is048 = Math.abs(currentWeightKg - 0.48) < 0.05;
-      this.drawReferenceArc(0.48, '0.48 kg', is048 ? '#2563eb' : 'rgba(100, 116, 139, 0.65)', is048);
-
-      // 0.68 kg (hits target)
-      const is068 = Math.abs(currentWeightKg - 0.68) < 0.05;
-      this.drawReferenceArc(0.68, '0.68 kg', is068 ? '#2563eb' : 'rgba(70, 85, 110, 0.75)', is068);
-
-      // 0.95 kg (overshoots)
-      const is095 = Math.abs(currentWeightKg - 0.95) < 0.05;
-      this.drawReferenceArc(0.95, '0.95 kg', is095 ? '#2563eb' : 'rgba(100, 116, 139, 0.65)', is095);
-    }
+    // (Static reference arcs removed per user request: only live recorded flight path is rendered)
 
     // 2. Draw Floating Weight Callout Badge next to black counterweight box
     this.drawWeightCallout();

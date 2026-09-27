@@ -3,7 +3,14 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import * as TWEEN from '@tweenjs/tween.js';
 import confetti from 'canvas-confetti';
 
-import { createWoodTableTexture, createPaperWithSketchTexture, createBalsaTexture, createLeadTexture } from './textures.js';
+import {
+  createWoodTableTexture,
+  createPaperWithSketchTexture,
+  createTrebuchetCutoutTexture,
+  createBlocksCutoutTexture,
+  createBalsaTexture,
+  createLeadTexture
+} from './textures.js';
 import { PhysicsWorld } from './physics.js';
 import { TrebuchetModel } from './trebuchet.js';
 import { Environment } from './environment.js';
@@ -48,6 +55,10 @@ class App {
     this.soundBtn = document.getElementById('panel-sound-btn');
     this.scrubberMute = document.getElementById('scrubber-mute');
     this.playerScrubber = document.getElementById('player-scrubber');
+    this.scrubberPlay = document.getElementById('scrubber-play');
+    this.scrubberRw = document.getElementById('scrubber-rw');
+    this.scrubberFf = document.getElementById('scrubber-ff');
+    this.scrubberContainer = document.getElementById('scrubber-container');
     this.zoomSlider = document.getElementById('zoom-slider');
     this.zoomFactor = 1.6;
 
@@ -56,9 +67,9 @@ class App {
     this.timeScale = 1.0;
     this.counterweightKg = 0.68;
     this.flightPathEnabled = true;
-    // The opening presentation is playback-only until the user chooses
-    // "Build it yourself".  The same guard is reused while a tour runs.
     this.isTourRunning = true;
+    this.isTourPlaying = false;
+    this.tourAbortController = null;
     this.isFiring = false;
     this.isCameraTransitioning = false;
     this.cameraTransitionId = 0;
@@ -94,9 +105,8 @@ class App {
     this.clock = new THREE.Clock();
     this.animate();
 
-    // Start with Hero camera view
-    this.setCameraView('Hero', 0);
-    this.updateNavButtons('tour');
+    // Boot into default state: First frame showing pencil sketch on engineering paper
+    this.resetToFirstFrame();
   }
 
   initThree() {
@@ -193,9 +203,74 @@ class App {
 
   initEnvironment() {
     this.woodTableTexture = createWoodTableTexture();
-    this.paperSketchTexture = createPaperWithSketchTexture();
-    this.environment = new Environment(this.scene, this.woodTableTexture, this.paperSketchTexture);
+    this.paperSketchTexture = createPaperWithSketchTexture(true);
+    this.paperCleanTexture = createPaperWithSketchTexture(false);
+    this.environment = new Environment(
+      this.scene,
+      this.woodTableTexture,
+      this.paperSketchTexture,
+      this.paperCleanTexture
+    );
+    this.initSketchCutout();
   }
+
+  initSketchCutout() {
+    this.cutoutTexture = createTrebuchetCutoutTexture();
+    const geom = new THREE.PlaneGeometry(0.85, 0.68);
+    geom.translate(0, 0.68 / 2, 0); // Bottom edge rests on table surface at Y = 0
+    this.cutoutMat = new THREE.MeshStandardMaterial({
+      map: this.cutoutTexture,
+      transparent: true,
+      alphaTest: 0.08, // Enable accurate alpha-clipped shadow casting
+      side: THREE.DoubleSide,
+      roughness: 0.90,
+      metalness: 0.0,
+      depthWrite: false,
+    });
+    this.cutoutMesh = new THREE.Mesh(geom, this.cutoutMat);
+    this.cutoutMesh.castShadow = true;
+    this.cutoutMesh.receiveShadow = true;
+    this.cutoutMesh.customDepthMaterial = new THREE.MeshDepthMaterial({
+      depthPacking: THREE.RGBADepthPacking,
+      map: this.cutoutTexture,
+      alphaTest: 0.08,
+    });
+    // Align with trebuchet position (-0.72) and ground line Z = 0
+    this.cutoutMesh.position.set(-0.72, 0.007, 0);
+    this.cutoutMesh.rotation.x = -Math.PI / 2; // Flat on paper
+    this.cutoutMesh.visible = false;
+    this.scene.add(this.cutoutMesh);
+
+    // --- Blocks pyramid 2D cutout ---
+    // Pyramid: 4 blocks wide × 4 blocks tall, each 0.088 → 0.352 × 0.352
+    // Canvas texture has 440px pyramid in 512px canvas (0.352 * 512/440 ≈ 0.41)
+    const bGeom = new THREE.PlaneGeometry(0.41, 0.41);
+    bGeom.translate(0, 0.41 / 2, 0); // pivot at bottom edge (ground)
+    this.blocksCutoutTexture = createBlocksCutoutTexture();
+    this.blocksCutoutMat = new THREE.MeshStandardMaterial({
+      map: this.blocksCutoutTexture,
+      transparent: true,
+      alphaTest: 0.08,
+      side: THREE.DoubleSide,
+      roughness: 0.90,
+      metalness: 0.0,
+      depthWrite: false,
+    });
+    this.blocksCutoutMesh = new THREE.Mesh(bGeom, this.blocksCutoutMat);
+    this.blocksCutoutMesh.castShadow = true;
+    this.blocksCutoutMesh.receiveShadow = true;
+    this.blocksCutoutMesh.customDepthMaterial = new THREE.MeshDepthMaterial({
+      depthPacking: THREE.RGBADepthPacking,
+      map: this.blocksCutoutTexture,
+      alphaTest: 0.08,
+    });
+    // Align with pyramid center X=0.92, ground Y=0.007, Z=0
+    this.blocksCutoutMesh.position.set(0.92, 0.007, 0);
+    this.blocksCutoutMesh.rotation.x = -Math.PI / 2; // Flat on paper
+    this.blocksCutoutMesh.visible = false;
+    this.scene.add(this.blocksCutoutMesh);
+  }
+
 
   initAnnotations() {
     this.annotations = new TrajectoryAnnotations(this.annotationCanvas, this.camera);
@@ -323,7 +398,7 @@ class App {
     }
 
     this.isFiring = true;
-    sound.playRelease();
+    sound.playLaunch();
 
     this.annotations.clear();
     this.physics.ballReleased = false;
@@ -534,104 +609,376 @@ class App {
     this.statRange.textContent = '— mm';
   }
 
-  // Guided Tour sequence (matching YouTube demo script)
-  playTour() {
+  resetToFirstFrame() {
+    if (this.tourAbortController) {
+      this.tourAbortController.abort();
+      this.tourAbortController = null;
+    }
     this.isTourRunning = true;
-    this.buildPanel.classList.add('hidden');
-    this.dragHint.classList.add('hidden');
-    this.playerScrubber.classList.remove('hidden');
-    this.annotations.showTrajectories = true;
-    this.updateNavButtons('tour');
+    this.setPlayButtonState(false);
+    this.setSlowMo(false);
 
-    // Step 0: Top view showing pencil sketch on paper (3D model hidden)
-    this.setCameraView('Top', 0);
+    // 1. Show desk paper pencil sketch; hide 3D model and 2D cutout
+    this.environment.showPaperSketch();
     this.trebuchet.setMorphFactor(0);
+    this.trebuchet.group.visible = false;
+    if (this.cutoutMesh) {
+      this.cutoutMesh.visible = false;
+      this.cutoutMesh.rotation.x = -Math.PI / 2;
+      this.cutoutMesh.material.opacity = 1.0;
+    }
+    if (this.blocksCutoutMesh) {
+      this.blocksCutoutMesh.visible = false;
+      this.blocksCutoutMesh.rotation.x = -Math.PI / 2;
+      this.blocksCutoutMesh.material.opacity = 1.0;
+    }
     this.morphSlider.value = 0;
+
+
+    // 2. Hide blocks & projectile in sketch blueprint phase
     this.resetAll();
     this.physics.blockMeshes.forEach(m => m.visible = false);
     if (this.physics.ballMesh) this.physics.ballMesh.visible = false;
 
-    this.showTourBanner('Hand-drawn catapult design: 40 mm blocks, lead counterweight.');
-    this.updateScrubber(0.05, '00:04');
+    // 3. UI and Scrubber state: initial 00:00, Play ready
+    this.buildPanel.classList.add('hidden');
+    this.dragHint.classList.add('hidden');
+    this.playerScrubber.classList.remove('hidden');
+    this.annotations.showTrajectories = false;
+    this.annotations.clear();
+    this.updateScrubber(0, '00:00');
+    this.updateNavButtons('tour');
+    this.showTourBanner('Pencil Blueprint: Hand-drawn trebuchet sketch on engineer paper. Click Play to start the tour.');
 
-    // Smooth chained morph: 0 → 0.33 → 0.66 → 1.0 as one continuous motion
-    const applyMorph = (o) => {
-      this.trebuchet.setMorphFactor(o.f);
-      this.physics.setMorphFactor(o.f);
-      this.morphSlider.value = Math.round(o.f * 100);
-    };
+    // 4. Default camera view: looking down at the hand-drawn sketch
+    this.setCameraView('Top', 0);
+  }
 
-    setTimeout(() => {
-      this.showTourBanner('Folding the sketch up...');
-      this.environment.hidePaperSketch();
-      this.physics.blockMeshes.forEach(m => m.visible = true);
-      if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
-      this.setCameraView('Hero', 2500);
-      this.updateScrubber(0.20, '00:18');
+  setPlayButtonState(isPlaying) {
+    this.isTourPlaying = isPlaying;
+    if (!this.scrubberPlay) return;
+    if (isPlaying) {
+      this.scrubberPlay.innerHTML = `
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5">
+          <rect x="6" y="4" width="4" height="16" fill="rgba(37, 99, 235, 0.25)"></rect>
+          <rect x="14" y="4" width="4" height="16" fill="rgba(37, 99, 235, 0.25)"></rect>
+        </svg>
+      `;
+      this.scrubberPlay.title = 'Pause Tour';
+    } else {
+      this.scrubberPlay.innerHTML = `
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5">
+          <polygon points="6 4 20 12 6 20 6 4" fill="rgba(37, 99, 235, 0.15)"></polygon>
+        </svg>
+      `;
+      this.scrubberPlay.title = 'Play Tour';
+    }
+  }
 
-      new TWEEN.Tween({ f: 0 })
-        .to({ f: 0.33 }, 1500)
-        .easing(TWEEN.Easing.Cubic.InOut)
-        .onUpdate(applyMorph)
+  toggleTourPlay() {
+    if (this.isTourPlaying) {
+      if (this.tourAbortController) {
+        this.tourAbortController.abort();
+        this.tourAbortController = null;
+      }
+      this.setPlayButtonState(false);
+      this.showTourBanner('Tour paused. Click Play to resume or Rewind to restart.');
+    } else {
+      this.playTour();
+    }
+  }
+
+  // Guided Tour sequence (8-step smooth progression)
+  async playTour() {
+    if (this.tourAbortController) {
+      this.tourAbortController.abort();
+    }
+    this.tourAbortController = new AbortController();
+    const signal = this.tourAbortController.signal;
+
+    this.isTourRunning = true;
+    this.setPlayButtonState(true);
+    this.buildPanel.classList.add('hidden');
+    this.dragHint.classList.add('hidden');
+    this.playerScrubber.classList.remove('hidden');
+    this.annotations.showTrajectories = true;
+    this.annotations.clear();
+    this.updateNavButtons('tour');
+
+    const sleep = (ms) => new Promise((resolve, reject) => {
+      if (signal.aborted) return reject(new Error('Tour aborted'));
+      const id = setTimeout(() => resolve(), ms);
+      signal.addEventListener('abort', () => {
+        clearTimeout(id);
+        reject(new Error('Tour aborted'));
+      }, { once: true });
+    });
+
+    const tweenPromise = (from, to, duration, easing, onUpdate) => new Promise((resolve, reject) => {
+      if (signal.aborted) return reject(new Error('Tour aborted'));
+      let finished = false;
+      const tw = new TWEEN.Tween(from)
+        .to(to, duration)
+        .easing(easing || TWEEN.Easing.Cubic.InOut)
+        .onUpdate(onUpdate)
         .onComplete(() => {
-          this.showTourBanner('Rising into 3D...');
-          new TWEEN.Tween({ f: 0.33 })
-            .to({ f: 0.66 }, 1500)
-            .easing(TWEEN.Easing.Cubic.InOut)
-            .onUpdate(applyMorph)
-            .onComplete(() => {
-              this.showTourBanner('Adding wood grain...');
-              new TWEEN.Tween({ f: 0.66 })
-                .to({ f: 1.0 }, 1500)
-                .easing(TWEEN.Easing.Cubic.InOut)
-                .onUpdate(applyMorph)
-                .start();
-            })
-            .start();
+          if (!finished) {
+            finished = true;
+            resolve();
+          }
         })
         .start();
-    }, 2500);
 
-    // Step 4 (at 7.5s): First throw with 0.48 kg lead counterweight (falls short!)
-    setTimeout(() => {
-      this.showTourBanner('First throw: lead counterweight at 0.48 kg (simulated physics, not scripted).');
-      this.setWeight(0.48);
-      this.setPullAngle(45);
-      this.updateScrubber(0.40, '00:36');
+      const timeoutId = setTimeout(() => {
+        if (!finished) {
+          finished = true;
+          resolve();
+        }
+      }, duration + 60);
+
+      signal.addEventListener('abort', () => {
+        finished = true;
+        clearTimeout(timeoutId);
+        tw.stop();
+        reject(new Error('Tour aborted'));
+      }, { once: true });
+    });
+
+    try {
+      // -----------------------------------------------------------------
+      // Step 1: 显示草图 (Display sketch on engineer paper)
+      // -----------------------------------------------------------------
+      this.environment.showPaperSketch();
+      this.trebuchet.setMorphFactor(0);
+      this.trebuchet.group.visible = false;
+      if (this.cutoutMesh) this.cutoutMesh.visible = false;
+      if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
+      this.physics.blockMeshes.forEach(m => m.visible = false);
+      if (this.physics.ballMesh) this.physics.ballMesh.visible = false;
+
+      this.setCameraView('Top', 800);
+      this.showTourBanner('1/8 Hand-drawn catapult sketch on engineering paper');
+      this.updateScrubber(0.02, '00:02');
+
+      await sleep(1200);
+
+      // -----------------------------------------------------------------
+      // Step 2: 草图变2D纸片，垂直立起（投石机与方块纸片同步立起）
+      // 注意：2-8图纸上的投石机与方块铅笔画草图隐藏
+      // -----------------------------------------------------------------
+      this.showTourBanner('2/8 Sketch lifts off paper as 2D cutouts and stands upright');
+      this.updateScrubber(0.14, '00:12');
+
+      // Hide the pencil sketches drawn on desk paper (kept hidden through steps 2-8)
+      this.environment.hidePaperSketch();
+
+      // Show the 2D cutout planes lying flat on paper
+      if (this.cutoutMesh) {
+        this.cutoutMesh.visible = true;
+        this.cutoutMesh.rotation.x = -Math.PI / 2;
+        this.cutoutMesh.material.opacity = 1.0;
+      }
+      if (this.blocksCutoutMesh) {
+        this.blocksCutoutMesh.visible = true;
+        this.blocksCutoutMesh.rotation.x = -Math.PI / 2;
+        this.blocksCutoutMesh.material.opacity = 1.0;
+      }
+
+      // Smoothly swing camera to Side view (matching Image 1) while 2D paper cutouts stand up
+      this.setCameraView('Side', 1800);
+      sound.playPaperSlide();
+
+      // Animate rotation.x from -PI/2 (flat on paper) to 0 (standing vertical)
+      await tweenPromise(
+        { rotX: -Math.PI / 2 },
+        { rotX: 0 },
+        1800,
+        TWEEN.Easing.Cubic.InOut,
+        (o) => {
+          if (this.cutoutMesh) this.cutoutMesh.rotation.x = o.rotX;
+          if (this.blocksCutoutMesh) this.blocksCutoutMesh.rotation.x = o.rotX;
+        }
+      );
+
+      await sleep(350);
+
+      // -----------------------------------------------------------------
+      // Step 3: 2D纸片变为纸3D模型 (2D cutouts unfold into 3D folded paper model)
+      // -----------------------------------------------------------------
+      this.showTourBanner('3/8 Paper cutouts unfold thickness into folded 3D paper models');
+      this.updateScrubber(0.28, '00:24');
+
+      // Make 3D paper model visible
+      this.trebuchet.group.visible = true;
+      this.trebuchet.setMorphFactor(0.01);
+      this.physics.setMorphFactor(0.33);
+      this.physics.blockMeshes.forEach(m => m.visible = true);
+
+      // Concurrently unfold 3D model thickness and fade out 2D cutouts
+      await Promise.all([
+        tweenPromise(
+          { f: 0.01 },
+          { f: 0.33 },
+          1500,
+          TWEEN.Easing.Cubic.InOut,
+          (o) => {
+            this.trebuchet.setMorphFactor(o.f);
+            this.morphSlider.value = Math.round(o.f * 100);
+          }
+        ),
+        (this.cutoutMesh || this.blocksCutoutMesh) ? tweenPromise(
+          { op: 1.0 },
+          { op: 0.0 },
+          1000,
+          TWEEN.Easing.Cubic.In,
+          (o) => {
+            if (this.cutoutMesh) this.cutoutMesh.material.opacity = o.op;
+            if (this.blocksCutoutMesh) this.blocksCutoutMesh.material.opacity = o.op;
+          }
+        ) : Promise.resolve()
+      ]);
+
+      if (this.cutoutMesh) this.cutoutMesh.visible = false;
+      if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
+      await sleep(400);
+
+      // -----------------------------------------------------------------
+      // Step 4: 纸3D模型变为灰度白模型（没有其他颜色）
+      // -----------------------------------------------------------------
+      this.showTourBanner('4/8 Transforming into a pure clay monochrome white model');
+      this.updateScrubber(0.44, '00:38');
+
+      await tweenPromise(
+        { f: 0.33 },
+        { f: 0.66 },
+        1600,
+        TWEEN.Easing.Cubic.InOut,
+        (o) => {
+          this.trebuchet.setMorphFactor(o.f);
+          this.physics.setMorphFactor(o.f);
+          this.morphSlider.value = Math.round(o.f * 100);
+        }
+      );
+
+      await sleep(400);
+
+      // -----------------------------------------------------------------
+      // Step 5: 灰度白模型转为目前有材质颜色的3D模型
+      // -----------------------------------------------------------------
+      this.showTourBanner('5/8 Applying balsa wood grain, metal pins, and cast-lead counterweight');
+      this.updateScrubber(0.60, '00:52');
+      this.setCameraView('Hero', 1800);
+
+      await tweenPromise(
+        { f: 0.66 },
+        { f: 1.0 },
+        1600,
+        TWEEN.Easing.Cubic.InOut,
+        (o) => {
+          this.trebuchet.setMorphFactor(o.f);
+          this.physics.setMorphFactor(o.f);
+          this.morphSlider.value = Math.round(o.f * 100);
+        }
+      );
+
+      // Reveal ball in cup
+      if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
+      this.setPullAngle(0);
+      this.updateBallInCup();
+
+      await sleep(600);
+
+      // -----------------------------------------------------------------
+      // Step 6: 发射1次 (Fire projectile once)
+      // -----------------------------------------------------------------
+      this.showTourBanner('6/8 Pulling arm and launching projectile: direct hit on target pyramid!');
+      this.updateScrubber(0.72, '01:02');
+
+      // Cock arm smoothly to 45 deg with continuous tilt clicks
+      let lastPullSoundAngle = 0;
+      await tweenPromise(
+        { pull: 0 },
+        { pull: 45 },
+        900,
+        TWEEN.Easing.Cubic.Out,
+        (o) => {
+          this.setPullAngle(o.pull);
+          if (Math.abs(o.pull - lastPullSoundAngle) >= 5) {
+            sound.playTilt(0.4);
+            lastPullSoundAngle = o.pull;
+          }
+        }
+      );
+
+      await sleep(250);
+
+      // Launch ball!
       this.fire();
-    }, 7500);
 
-    // Step 5 (at 10.5s): Fall short -> Add more lead (0.48 kg -> 0.68 kg)!
-    setTimeout(() => {
-      this.showTourBanner('The first throw falls short, so the sketch gets more lead (0.48 kg → 0.68 kg)...');
-      this.updateScrubber(0.60, '00:54');
-      this.resetAll();
+      // Wait for ball to land and blocks to topple
+      await sleep(2400);
 
-      setTimeout(() => {
-        this.setWeight(0.68);
-        this.setPullAngle(45);
-      }, 800);
-    }, 10500);
+      // -----------------------------------------------------------------
+      // Step 7: slow motion重播刚才的发射
+      // -----------------------------------------------------------------
+      this.showTourBanner('7/8 Slow-motion replay at quarter speed (0.25×)');
+      this.updateScrubber(0.86, '01:14');
 
-    // Step 6 (at 13.5s): Second throw replayed in Slow Motion (0.25x), knocks down blocks!
-    setTimeout(() => {
-      this.showTourBanner('Second throw: 0.68 kg counterweight, replayed at quarter speed (0.25×).');
+      // Reset physics blocks & ball for replay
+      this.physics.resetBlocks();
+      this.physics.wakeBlocks();
+      this.physics.ballReleased = false;
+      this.updateBallInCup();
+
+      // Enable slow motion
       this.setSlowMo(true);
-      this.updateScrubber(0.85, '01:12');
+
+      // Cock arm to 45 deg again with continuous tilt clicks
+      let lastReplayPullSound = 0;
+      await tweenPromise(
+        { pull: 0 },
+        { pull: 45 },
+        700,
+        TWEEN.Easing.Cubic.Out,
+        (o) => {
+          this.setPullAngle(o.pull);
+          if (Math.abs(o.pull - lastReplayPullSound) >= 5) {
+            sound.playTilt(0.4);
+            lastReplayPullSound = o.pull;
+          }
+        }
+      );
+
+      await sleep(200);
+
+      // Launch slow motion
       this.fire();
-    }, 13500);
 
-    // Step 5 (at 17.0s): Complete tour & switch to "Build it yourself"
-    setTimeout(() => {
-      this.showTourBanner('Blocks knocked down! Tour complete — now build and launch it yourself.');
-      this.setSlowMo(false);
+      // Wait for slow motion shot to finish (runs at 0.25x so ~4.5s)
+      await sleep(4500);
+
+      // -----------------------------------------------------------------
+      // Step 8: 切到自定义界面状态
+      // 注意：2-8图纸上的投石机铅笔画草图隐藏
+      // -----------------------------------------------------------------
+      this.showTourBanner('8/8 Tour complete! Customize weight, pull angle, and launch it yourself.');
       this.updateScrubber(1.0, '01:24');
+      this.setSlowMo(false);
+      this.setPlayButtonState(false);
 
-      setTimeout(() => {
-        this.hideTourBanner();
-        this.showBuildPanel();
-      }, 2500);
-    }, 17000);
+      await sleep(1600);
+
+      this.hideTourBanner();
+      this.showBuildPanel(); // Switches interface to custom "Build it yourself" mode
+      this.updateNavButtons('build');
+
+    } catch (err) {
+      if (err.message === 'Tour aborted') {
+        console.log('Tour stopped or reset by user.');
+      } else {
+        console.error(err);
+      }
+    }
   }
 
   showTourBanner(text) {
@@ -678,19 +1025,42 @@ class App {
   }
 
   showBuildPanel() {
-    // The tour can also arrive here automatically.  It must explicitly leave
-    // tour state so the next custom launch uses the normal reset behavior.
+    if (this.tourAbortController) {
+      this.tourAbortController.abort();
+      this.tourAbortController = null;
+    }
     this.isTourRunning = false;
+    this.setPlayButtonState(false);
+    this.setSlowMo(false);
+
+    // Keep desk paper sketch hidden and 2D cutout hidden
+    this.environment.hidePaperSketch();
+    if (this.cutoutMesh) this.cutoutMesh.visible = false;
+    if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
+
+    // Full 3D textured model
+    this.trebuchet.group.visible = true;
+    this.trebuchet.setMorphFactor(1.0);
+    this.physics.setMorphFactor(1.0);
+    this.morphSlider.value = 100;
+    this.physics.blockMeshes.forEach(m => m.visible = true);
+    if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
+
     this.buildPanel.classList.remove('hidden');
     this.dragHint.classList.remove('hidden');
     this.playerScrubber.classList.add('hidden');
     this.annotations.showTrajectories = false;
     this.updateNavButtons('build');
-    // Entering build mode: reset to natural rest (counterweight on floor, spoon up)
+
+    // Reset arm to rest (0° pull, counterweight on floor, spoon up)
     this.setPullAngle(0);
     this.physics.ballReleased = false;
     this.updateBallInCup();
     this.updateDragHint();
+
+    if (this.currentView === 'Top') {
+      this.setCameraView('Hero', 1000);
+    }
   }
 
   updateDragHint() {
@@ -765,7 +1135,7 @@ class App {
     // Throw / Pull slider
     this.pullSlider.addEventListener('input', (e) => {
       this.setPullAngle(parseInt(e.target.value));
-      sound.playCreak();
+      sound.playTilt(0.45);
     });
 
     // Morph slider (Sketch to Model)
@@ -802,6 +1172,42 @@ class App {
       this.scrubberMute.style.opacity = muted ? '0.4' : '1';
     });
 
+    // Scrubber player controls (Play, Rewind, Fast Forward, Timeline click)
+    if (this.scrubberPlay) {
+      this.scrubberPlay.addEventListener('click', () => {
+        sound.init();
+        this.toggleTourPlay();
+      });
+    }
+
+    if (this.scrubberRw) {
+      this.scrubberRw.addEventListener('click', () => {
+        sound.init();
+        this.resetToFirstFrame();
+      });
+    }
+
+    if (this.scrubberFf) {
+      this.scrubberFf.addEventListener('click', () => {
+        sound.init();
+        this.showBuildPanel();
+      });
+    }
+
+    if (this.scrubberContainer) {
+      this.scrubberContainer.addEventListener('click', (e) => {
+        const rect = this.scrubberContainer.getBoundingClientRect();
+        const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        if (clickRatio > 0.85) {
+          this.showBuildPanel();
+        } else if (clickRatio < 0.15) {
+          this.resetToFirstFrame();
+        } else {
+          this.playTour();
+        }
+      });
+    }
+
     // Mouse / Touch Dragging of the spoon downwards:
     // The pointer is projected on the arm's movement plane, then its height
     // is converted back to an arm angle.  This keeps the cup under the held
@@ -825,9 +1231,6 @@ class App {
         this.renderer.domElement.releasePointerCapture?.(this.activePointerId);
       }
       this.activePointerId = null;
-
-      // Release sound only after a real drag (not a simple click)
-      if (this.dragMoved) sound.playRestore();
 
       // A press is only a grab.  The arm launches exclusively after a real,
       // downward pull and release, so accidental clicks cannot fire the ball.

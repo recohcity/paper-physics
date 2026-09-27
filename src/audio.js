@@ -17,59 +17,147 @@ class SoundManager {
     }
   }
 
-  playRelease() {
+  // 1. 2D 纸片立起 / 翻动音效：轻快清脆的滑动纸卡音效（如同左右滑动选择照片/切换卡片）
+  playPaperSlide() {
+    if (this.muted) return;
+    this.init();
+    const now = this.ctx.currentTime;
+    const dur = 0.18;
+
+    const bufSize = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buf;
+
+    // 动态带通滤波：频率由中高频向上掠过再平滑落下，呈现清爽利落的纸片滑动空气感
+    const bpf = this.ctx.createBiquadFilter();
+    bpf.type = 'bandpass';
+    bpf.frequency.setValueAtTime(1600, now);
+    bpf.frequency.exponentialRampToValueAtTime(3400, now + 0.06);
+    bpf.frequency.exponentialRampToValueAtTime(1400, now + dur);
+    bpf.Q.setValueAtTime(1.8, now);
+
+    // 高通切除低频杂音
+    const hpf = this.ctx.createBiquadFilter();
+    hpf.type = 'highpass';
+    hpf.frequency.setValueAtTime(900, now);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.38, now + 0.035);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    noise.connect(bpf);
+    bpf.connect(hpf);
+    hpf.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    noise.start(now);
+  }
+
+  // 2. 发射 / 松手音效：大炮射击、炮膛喷发轰鸣（Cannon blast & projectile launch thump）
+  playLaunch() {
     if (this.muted) return;
     this.init();
     const now = this.ctx.currentTime;
 
-    // Deep wood snap / thunk
+    // A. 瞬态初击锤冲击波（Transient Punch）
+    const punchOsc = this.ctx.createOscillator();
+    const punchGain = this.ctx.createGain();
+    punchOsc.type = 'triangle';
+    punchOsc.frequency.setValueAtTime(240, now);
+    punchOsc.frequency.exponentialRampToValueAtTime(50, now + 0.07);
+
+    punchGain.gain.setValueAtTime(0.85, now);
+    punchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    punchOsc.connect(punchGain);
+    punchGain.connect(this.ctx.destination);
+    punchOsc.start(now);
+    punchOsc.stop(now + 0.08);
+
+    // B. 大炮浑厚次低频轰鸣（Sub-bass Cannon Boom）
+    const boomOsc = this.ctx.createOscillator();
+    const boomGain = this.ctx.createGain();
+    boomOsc.type = 'sine';
+    boomOsc.frequency.setValueAtTime(130, now);
+    boomOsc.frequency.exponentialRampToValueAtTime(36, now + 0.42);
+
+    boomGain.gain.setValueAtTime(0.95, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.50);
+
+    boomOsc.connect(boomGain);
+    boomGain.connect(this.ctx.destination);
+    boomOsc.start(now);
+    boomOsc.stop(now + 0.50);
+
+    // C. 炮膛高压气体喷发爆破风噪（Explosive blast expulsion whoosh）
+    const noiseDur = 0.35;
+    const bufSize = Math.floor(this.ctx.sampleRate * noiseDur);
+    const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noiseSource = this.ctx.createBufferSource();
+    noiseSource.buffer = buf;
+
+    const lpf = this.ctx.createBiquadFilter();
+    lpf.type = 'lowpass';
+    lpf.frequency.setValueAtTime(950, now);
+    lpf.frequency.exponentialRampToValueAtTime(180, now + noiseDur);
+    lpf.Q.setValueAtTime(2.2, now);
+
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.75, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + noiseDur);
+
+    noiseSource.connect(lpf);
+    lpf.connect(noiseGain);
+    noiseGain.connect(this.ctx.destination);
+
+    noiseSource.start(now);
+  }
+
+  // 别名，确保所有旧的 playRelease 自动调用强劲的大炮发射声
+  playRelease() {
+    this.playLaunch();
+  }
+
+  // 3. 拖拽勺子的连续微动音效（清脆刻度点击感）
+  playTilt(intensity = 0.5) {
+    if (this.muted) return;
+    this.init();
+    const now = this.ctx.currentTime;
+
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(140, now);
-    osc.frequency.exponentialRampToValueAtTime(35, now + 0.12);
+    osc.type = 'sine';
+    const baseFreq = 380 + intensity * 320;
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.65, now + 0.035);
 
-    gain.gain.setValueAtTime(0.7, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+    gain.gain.setValueAtTime(0.42, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
 
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.15);
-
-    // Friction swoosh
-    const bufferSize = this.ctx.sampleRate * 0.15;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const output = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
-    }
-
-    const whiteNoise = this.ctx.createBufferSource();
-    whiteNoise.buffer = buffer;
-
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(450, now);
-    filter.Q.setValueAtTime(1.5, now);
-
-    const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.3, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-
-    whiteNoise.connect(filter);
-    filter.connect(noiseGain);
-    noiseGain.connect(this.ctx.destination);
-
-    whiteNoise.start(now);
+    osc.stop(now + 0.045);
   }
 
+  // 击中木块碰撞声
   playBlockHit(intensity = 1.0) {
     if (this.muted) return;
     this.init();
     const now = this.ctx.currentTime;
 
-    // Wooden knock
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'sine';
@@ -87,47 +175,9 @@ class SoundManager {
     osc.stop(now + 0.09);
   }
 
-  playTilt(intensity = 0.5) {
-    if (this.muted) return;
-    this.init();
-    const now = this.ctx.currentTime;
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    const baseFreq = 400 + intensity * 400;
-    osc.frequency.setValueAtTime(baseFreq, now);
-    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.6, now + 0.04);
-
-    gain.gain.setValueAtTime(0.5, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.06);
-  }
-
-  // Release / rebound sound — triangle wave, quick rise then settle
+  // 轻微弹性复位声（仅在低幅度不发射的轻微复位时备用）
   playRestore() {
-    if (this.muted) return;
-    this.init();
-    const now = this.ctx.currentTime;
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(520, now);
-    osc.frequency.exponentialRampToValueAtTime(780, now + 0.05);
-    osc.frequency.exponentialRampToValueAtTime(420, now + 0.16);
-
-    gain.gain.setValueAtTime(0.38, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.18);
+    this.playTilt(0.3);
   }
 
   toggleMute() {
