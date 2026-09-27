@@ -51,98 +51,126 @@ export class Environment {
 
   createPencil() {
     const pencilGroup = new THREE.Group();
-    pencilGroup.position.set(0.05, 0.015, -0.62);
-    pencilGroup.rotation.y = 0.08;
+    // A4 scale: 2.7 units = 297mm -> 1mm ≈ 0.00909 units.
+    // Standard sharpened pencil with eraser: length ≤ 190mm (~180mm -> 1.63 units), diameter 7.8mm (~0.071 units, radius 0.0355).
+    const pencilR = 0.0355; // 7.8mm diameter / 2
+    const paperY = 0.006;
+    pencilGroup.position.set(-0.05, paperY + pencilR, -0.73);
+    pencilGroup.rotation.y = 0.04;
 
-    // Hexagonal pencil body (wood / yellow-cedar)
-    const bodyGeom = new THREE.CylinderGeometry(0.011, 0.011, 0.42, 6);
+    // 1. Hexagonal wooden body (warm cedar lacquer)
+    const bodyLength = 1.25; // ~138mm
+    const bodyGeom = new THREE.CylinderGeometry(pencilR, pencilR, bodyLength, 6);
     bodyGeom.rotateZ(Math.PI / 2);
     const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0xdfa66c, // warm cedar wood pencil
-      roughness: 0.6,
+      color: 0xdfa66c,
+      roughness: 0.55,
+      metalness: 0.05,
     });
     const body = new THREE.Mesh(bodyGeom, bodyMat);
     body.castShadow = true;
+    body.receiveShadow = true;
     pencilGroup.add(body);
 
-    // Sharpened cone tip (exposed wood) — apex points left, base meets body
-    const tipWoodGeom = new THREE.ConeGeometry(0.011, 0.045, 6);
-    tipWoodGeom.rotateZ(Math.PI / 2);
+    // 2. Sharpened exposed wood cone (natural basswood/cedar inner grain)
+    const coneLength = 0.18; // ~20mm
+    const tipWoodGeom = new THREE.ConeGeometry(pencilR, coneLength, 16);
+    tipWoodGeom.rotateZ(-Math.PI / 2); // points left (-X)
     const tipWoodMat = new THREE.MeshStandardMaterial({
-      color: 0xf5deb3,
-      roughness: 0.7,
+      color: 0xf3dfc1,
+      roughness: 0.75,
     });
     const tipWood = new THREE.Mesh(tipWoodGeom, tipWoodMat);
-    tipWood.position.set(-0.232, 0, 0);
+    tipWood.position.set(-bodyLength / 2 - coneLength / 2, 0, 0);
     tipWood.castShadow = true;
+    tipWood.receiveShadow = true;
     pencilGroup.add(tipWood);
 
-    // Graphite lead tip — base embedded inside the wood cone, nib protrudes past the wood point
-    const leadGeom = new THREE.ConeGeometry(0.0035, 0.02, 8);
-    leadGeom.rotateZ(Math.PI / 2);
+    // 3. Graphite lead core tip
+    const leadLength = 0.035; // ~3.8mm
+    const leadR = 0.0095; // ~2.1mm diameter / 2
+    const leadGeom = new THREE.ConeGeometry(leadR, leadLength, 12);
+    leadGeom.rotateZ(-Math.PI / 2); // points left (-X)
     const leadMat = new THREE.MeshStandardMaterial({
-      color: 0x222222,
-      roughness: 0.3,
+      color: 0x1f1f22,
+      roughness: 0.25,
+      metalness: 0.2,
     });
     const lead = new THREE.Mesh(leadGeom, leadMat);
-    lead.position.set(-0.248, 0, 0);
+    lead.position.set(-bodyLength / 2 - coneLength + leadLength / 2 - 0.002, 0, 0);
     lead.castShadow = true;
     pencilGroup.add(lead);
 
-    // Metal ferrule (silver / brass)
-    const ferruleGeom = new THREE.CylinderGeometry(0.0115, 0.0115, 0.03, 16);
+    // 4. Aluminum ferrule (brass / silver metal band with crimp rings)
+    const ferruleLength = 0.10; // ~11mm
+    const ferruleR = pencilR * 1.025;
+    const ferruleGeom = new THREE.CylinderGeometry(ferruleR, ferruleR, ferruleLength, 24);
     ferruleGeom.rotateZ(Math.PI / 2);
     const ferruleMat = new THREE.MeshStandardMaterial({
-      color: 0xc8c2b5,
-      metalness: 0.8,
-      roughness: 0.3,
+      color: 0xd8d3c7,
+      metalness: 0.85,
+      roughness: 0.25,
     });
     const ferrule = new THREE.Mesh(ferruleGeom, ferruleMat);
-    ferrule.position.set(0.225, 0, 0);
+    ferrule.position.set(bodyLength / 2 + ferruleLength / 2, 0, 0);
     ferrule.castShadow = true;
+    ferrule.receiveShadow = true;
     pencilGroup.add(ferrule);
 
-    // Pink rubber eraser
-    const eraserGeom = new THREE.CylinderGeometry(0.0105, 0.0105, 0.035, 16);
+    // 5. Pink rubber eraser top
+    const eraserLength = 0.09; // ~10mm
+    const eraserR = pencilR * 0.98;
+    const eraserGeom = new THREE.CylinderGeometry(eraserR, eraserR, eraserLength, 20);
     eraserGeom.rotateZ(Math.PI / 2);
     const eraserMat = new THREE.MeshStandardMaterial({
-      color: 0xec7272,
+      color: 0xeb6b6b,
       roughness: 0.9,
     });
     const eraser = new THREE.Mesh(eraserGeom, eraserMat);
-    eraser.position.set(0.255, 0, 0);
+    eraser.position.set(bodyLength / 2 + ferruleLength + eraserLength / 2, 0, 0);
     eraser.castShadow = true;
+    eraser.receiveShadow = true;
     pencilGroup.add(eraser);
 
     this.scene.add(pencilGroup);
   }
 
   createEraser() {
-    // Classic Blue & White block eraser
+    // Standard rectangular block eraser:
+    // 5.0 ~ 6.0 cm long (~55mm -> 0.50 units)
+    // 2.0 ~ 2.5 cm wide (~22mm -> 0.20 units)
+    // 1.2 cm thick (~12mm -> 0.109 units)
     const eraserGroup = new THREE.Group();
-    eraserGroup.position.set(0.55, 0.020, -0.68);
-    eraserGroup.rotation.y = -0.35;
+    const paperY = 0.006;
+    const eraserThickness = 0.109;
+    eraserGroup.position.set(0.96, paperY + eraserThickness / 2, -0.73);
+    eraserGroup.rotation.y = -0.22;
+
+    const eraserLength = 0.50;
+    const eraserWidth = 0.20;
 
     // White rubber block
-    const whiteGeom = new THREE.BoxGeometry(0.09, 0.032, 0.045);
+    const whiteGeom = new THREE.BoxGeometry(eraserLength, eraserThickness, eraserWidth);
     const whiteMat = new THREE.MeshStandardMaterial({
-      color: 0xf4f4f4,
-      roughness: 0.85,
+      color: 0xf5f5f5,
+      roughness: 0.88,
     });
     const whiteBlock = new THREE.Mesh(whiteGeom, whiteMat);
     whiteBlock.castShadow = true;
     whiteBlock.receiveShadow = true;
     eraserGroup.add(whiteBlock);
 
-    // Blue cardboard sleeve wrapped around the middle/back
-    const sleeveGeom = new THREE.BoxGeometry(0.055, 0.034, 0.047);
+    // Blue cardboard protective sleeve wrapped around the middle/back
+    const sleeveLength = 0.32;
+    const sleeveGeom = new THREE.BoxGeometry(sleeveLength, eraserThickness + 0.004, eraserWidth + 0.004);
     const sleeveMat = new THREE.MeshStandardMaterial({
-      color: 0x1d4ed8, // vivid blue sleeve
-      roughness: 0.5,
+      color: 0x1d4ed8, // vivid classic blue sleeve
+      roughness: 0.45,
     });
     const sleeve = new THREE.Mesh(sleeveGeom, sleeveMat);
-    sleeve.position.set(0.02, 0, 0);
+    sleeve.position.set(0.06, 0, 0);
     sleeve.castShadow = true;
+    sleeve.receiveShadow = true;
     eraserGroup.add(sleeve);
 
     this.scene.add(eraserGroup);
