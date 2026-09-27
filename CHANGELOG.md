@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.2] - 2026-09-27
+
+### Added
+- **Multi-stage sketch-to-model morph**: chained animation — pencil sketch on paper → paper-craft parts → white 3D model → textured wooden model, with paper sketch disappearing once 3D model appears.
+- **Synchronized morph across all objects**: trebuchet, ball, and block pyramid transition through all stages together.
+- **Pendulum & recoil physics**: counterweight pendulum swing during drag and launch, trebuchet recoil on ball release.
+- **Drag-to-pull interaction**: continuous tilt sound proportional to drag speed, release restore sound on let-go.
+- **Stainless steel hardware**: bearing pins, hanger lugs, and ball bearing ball with proper env-map reflections.
+- **Integrated player scrubber**: moved into bottom control bar.
+- **Auto-sleep physics**: blocks settle to STATIC after collision, no jitter on window resize.
+
+### Changed
+- **Layout**: bottom panel restructured — nav left, player center, build controls right; tour banner hidden in build mode.
+- **Audio**: continuous drag tilt sound (400–800Hz sine), release triangle wave; click no longer triggers sound.
+- **Paper**: 6mm thick box with correct shadow; sketch hidden once 3D model appears.
+- **Camera**: auto-fit entire desk + paper + objects across all three views; zoom slider at 160% default.
+
+### Fixed
+- Blocks no longer fly away on second shot (fixed-timestep physics, proper activation timing).
+- Ball no longer visible during sketch phase.
+- Metal materials no longer render black (RoomEnvironment env map).
+- Cup geometry wraps 3/4 of sphere.
+
 ## [0.0.1] - 2026-09-27
 
 ### Added

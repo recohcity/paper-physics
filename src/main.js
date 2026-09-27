@@ -60,7 +60,7 @@ class App {
     this.scrubberFf = document.getElementById('scrubber-ff');
     this.scrubberContainer = document.getElementById('scrubber-container');
     this.zoomSlider = document.getElementById('zoom-slider');
-    this.zoomFactor = 1.6;
+    this.zoomFactor = 1;
 
     // Simulation settings
     this.slowMotion = false;
@@ -1032,6 +1032,7 @@ class App {
     this.isTourRunning = false;
     this.setPlayButtonState(false);
     this.setSlowMo(false);
+    this.tourBanner.classList.add('hidden');
 
     // Keep desk paper sketch hidden and 2D cutout hidden
     this.environment.hidePaperSketch();

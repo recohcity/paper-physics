@@ -114,10 +114,8 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
 
 /* Scrubber above bottom bar */
 .player-scrubber {
-  position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 9;
-  display: flex; align-items: center; gap: 14px;
-  background: rgba(245,242,236,0.45); border: 1px solid rgba(215,205,190,0.35);
-  padding: 8px 18px; border-radius: 999px; backdrop-filter: blur(10px); width: 520px; max-width: 85vw;
+  display: flex; align-items: center; gap: 12px;
+  padding: 4px 12px; border-radius: 999px; flex: 1; max-width: 500px;
 }
 .player-icon-btn { background: none; border: none; cursor: pointer; color: #665b50; display: flex; align-items: center; padding: 4px; }
 .play-circle { color: var(--accent-blue); width: 32px; height: 32px; border-radius: 50%; }
@@ -130,7 +128,7 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14p
 
 /* Drag hint */
 .drag-hint {
-  position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 10;
+  position: absolute; top: 70px; left: 50%; transform: translateX(-50%); z-index: 10;
   background: rgba(248,245,240,0.95); border: 1px solid var(--card-border);
   padding: 8px 18px; border-radius: 999px; font-size: 12px; font-weight: 500; color: #3b3227;
   display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-md); backdrop-filter: blur(8px);

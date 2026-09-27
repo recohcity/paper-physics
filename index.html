@@ -53,6 +53,32 @@
       </div>
     </div>
 
+  <!-- Bottom Center Scrubber Bar (Player UI) -->
+  <div id="player-scrubber" class="player-scrubber">
+    <button id="scrubber-mute" class="player-icon-btn" title="Toggle Sound">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+    </button>
+    <div class="scrubber-time" id="scrubber-current-time">00:04</div>
+    <div class="scrubber-track-container" id="scrubber-container">
+      <div class="scrubber-track">
+        <div class="scrubber-progress" id="scrubber-progress" style="width: 15%;"></div>
+        <div class="scrubber-thumb" id="scrubber-thumb" style="left: 15%;"></div>
+      </div>
+    </div>
+    <div class="scrubber-controls">
+      <button id="scrubber-rw" class="player-icon-btn" title="Rewind">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 19 2 12 11 5 11 19"></polygon><polygon points="22 19 13 12 22 5 22 19"></polygon></svg>
+      </button>
+      <button id="scrubber-play" class="player-icon-btn play-circle" title="Play/Pause">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><polygon points="6 4 20 12 6 20 6 4" fill="rgba(37, 99, 235, 0.15)"></polygon></svg>
+      </button>
+      <button id="scrubber-ff" class="player-icon-btn" title="Fast Forward">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 19 22 12 13 5 13 19"></polygon><polygon points="2 19 11 12 2 5 2 19"></polygon></svg>
+      </button>
+    </div>
+    <div class="scrubber-time" id="scrubber-total-time">01:24</div>
+  </div>
+
     <!-- Right: Build controls (hidden in tour mode) -->
     <div id="build-panel" class="build-panel hidden">
       <!-- Stats 4-Column Grid -->
@@ -130,32 +156,6 @@
         </button>
       </div>
     </div>
-  </div>
-
-  <!-- Bottom Center Scrubber Bar (Player UI) -->
-  <div id="player-scrubber" class="player-scrubber">
-    <button id="scrubber-mute" class="player-icon-btn" title="Toggle Sound">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-    </button>
-    <div class="scrubber-time" id="scrubber-current-time">00:04</div>
-    <div class="scrubber-track-container" id="scrubber-container">
-      <div class="scrubber-track">
-        <div class="scrubber-progress" id="scrubber-progress" style="width: 15%;"></div>
-        <div class="scrubber-thumb" id="scrubber-thumb" style="left: 15%;"></div>
-      </div>
-    </div>
-    <div class="scrubber-controls">
-      <button id="scrubber-rw" class="player-icon-btn" title="Rewind">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 19 2 12 11 5 11 19"></polygon><polygon points="22 19 13 12 22 5 22 19"></polygon></svg>
-      </button>
-      <button id="scrubber-play" class="player-icon-btn play-circle" title="Play/Pause">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><polygon points="6 4 20 12 6 20 6 4" fill="rgba(37, 99, 235, 0.15)"></polygon></svg>
-      </button>
-      <button id="scrubber-ff" class="player-icon-btn" title="Fast Forward">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 19 22 12 13 5 13 19"></polygon><polygon points="2 19 11 12 2 5 2 19"></polygon></svg>
-      </button>
-    </div>
-    <div class="scrubber-time" id="scrubber-total-time">01:24</div>
   </div>
 
   <!-- Drag Instruction Pill -->
