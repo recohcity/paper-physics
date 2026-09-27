@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paper Trebuchet — Sketch to Physics (Claude Replica)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container"></div>
+  
+  <!-- 2D Overlay Canvas for Physics Trajectory Annotations (handwritten style) -->
+  <canvas id="annotation-canvas"></canvas>
+
+  <!-- Slow Motion 0.25x Badge -->
+  <div id="slow-mo-badge" class="badge-025x hidden">0.25×</div>
+
+  <!-- Tour Notification / Narrative Banner -->
+  <div id="tour-banner" class="tour-banner hidden">
+    <div class="tour-banner-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+    </div>
+    <div class="tour-banner-text" id="tour-banner-text">
+      The first throw falls short, so the sketch gets more lead (0.48 kg → 0.68 kg).
+    </div>
+  </div>
+
+  <!-- Bottom Control Bar: integrated nav + build controls -->
+  <div id="bottom-bar" class="bottom-bar">
+    <!-- Left: Title + Nav -->
+    <div class="bottom-left">
+      <div class="brand">
+        <span class="brand-tag">SKETCH TO PHYSICS</span>
+        <h1 class="brand-title">Paper Trebuchet</h1>
+      </div>
+      <div class="nav-buttons">
+        <button id="btn-play-tour" class="btn btn-primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+          Play the tour
+        </button>
+        <button id="btn-build-yourself" class="btn btn-secondary">
+          Build it yourself
+        </button>
+      </div>
+      <div class="zoom-control">
+        <span class="zoom-icon">&#8722;</span>
+        <input type="range" id="zoom-slider" min="60" max="200" value="160" step="5">
+        <span class="zoom-icon">+</span>
+      </div>
+    </div>
+
+    <!-- Right: Build controls (hidden in tour mode) -->
+    <div id="build-panel" class="build-panel hidden">
+      <!-- Stats 4-Column Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-speed">— m/s</div>
+          <div class="stat-label">SPEED</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-angle">— °</div>
+          <div class="stat-label">ANGLE</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-range">— mm</div>
+          <div class="stat-label">RANGE</div>
+        </div>
+        <div class="stat-card highlight">
+          <div class="stat-value"><span id="stat-down-count">0</span>/10</div>
+          <div class="stat-label">DOWN</div>
+        </div>
+      </div>
+
+      <!-- Throw slider -->
+      <div class="ctrl-group">
+        <div class="ctrl-label-row">
+          <label>THROW</label>
+          <span class="value-badge" id="pull-angle-label">pull 0°</span>
+        </div>
+        <input type="range" id="pull-slider" min="0" max="84.5" value="0" step="0.5">
+      </div>
+
+      <!-- Fire button -->
+      <button id="btn-fire" class="btn-fire">Fire</button>
+
+      <!-- Toggles -->
+      <div class="toggles-row">
+        <button id="btn-toggle-slowmo" class="pill-btn">
+          <span class="pill-dot"></span> Slow motion
+        </button>
+        <button id="btn-toggle-flightpath" class="pill-btn active">
+          <span class="pill-dot active">●</span> Flight path
+        </button>
+      </div>
+
+      <!-- Weight slider -->
+      <div class="ctrl-group">
+        <div class="ctrl-label-row">
+          <label>WEIGHT</label>
+          <span class="value-badge" id="weight-label">0.68 kg</span>
+        </div>
+        <input type="range" id="weight-slider" min="0.30" max="1.00" value="0.68" step="0.01">
+      </div>
+
+      <!-- Morph slider -->
+      <div class="ctrl-group">
+        <div class="ctrl-label-row">
+          <label>SKETCH—MODEL</label>
+        </div>
+        <input type="range" id="morph-slider" min="0" max="100" value="100" step="1">
+      </div>
+
+      <!-- View switcher -->
+      <div class="view-buttons">
+        <span class="view-label">VIEW</span>
+        <button id="btn-view-hero" class="view-btn active">Hero</button>
+        <button id="btn-view-side" class="view-btn">Side</button>
+        <button id="btn-view-top" class="view-btn">Top</button>
+      </div>
+
+      <!-- Footer actions -->
+      <div class="panel-footer">
+        <button id="btn-reset" class="action-btn">Reset</button>
+        <button id="panel-sound-btn" class="action-btn icon-only" title="Toggle Sound">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Center Scrubber Bar (Player UI) -->
+  <div id="player-scrubber" class="player-scrubber">
+    <button id="scrubber-mute" class="player-icon-btn" title="Toggle Sound">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+    </button>
+    <div class="scrubber-time" id="scrubber-current-time">00:04</div>
+    <div class="scrubber-track-container" id="scrubber-container">
+      <div class="scrubber-track">
+        <div class="scrubber-progress" id="scrubber-progress" style="width: 15%;"></div>
+        <div class="scrubber-thumb" id="scrubber-thumb" style="left: 15%;"></div>
+      </div>
+    </div>
+    <div class="scrubber-controls">
+      <button id="scrubber-rw" class="player-icon-btn" title="Rewind">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 19 2 12 11 5 11 19"></polygon><polygon points="22 19 13 12 22 5 22 19"></polygon></svg>
+      </button>
+      <button id="scrubber-play" class="player-icon-btn play-circle" title="Play/Pause">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><polygon points="6 4 20 12 6 20 6 4" fill="rgba(37, 99, 235, 0.15)"></polygon></svg>
+      </button>
+      <button id="scrubber-ff" class="player-icon-btn" title="Fast Forward">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 19 22 12 13 5 13 19"></polygon><polygon points="2 19 11 12 2 5 2 19"></polygon></svg>
+      </button>
+    </div>
+    <div class="scrubber-time" id="scrubber-total-time">01:24</div>
+  </div>
+
+  <!-- Drag Instruction Pill -->
+  <div id="drag-hint" class="drag-hint hidden">
+      <span class="dot">●</span> Hold the cup, pull down, and let go
+  </div>
+
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
