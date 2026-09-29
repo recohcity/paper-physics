@@ -36,7 +36,6 @@ All notable changes to this project will be documented in this file.
 ### 架构与 skill 反哺
 - **运行时单一数据源**：新增 `src/spec.js`（MECH / GEOM / UI），physics/trebuchet/main 全部 import；过时注释迁移至 CHANGELOG；重构前后发射数值一致（3.53 m/s / 31°）。
 - **skill 反哺**：审计记录 V2–V5 落地；checklist 新增 M6/P6（V3）、A1-A9（V4）、T1-T5（V5）；pitfalls 增至 17 条（含装饰物碰撞、演示终止判据）。
-- **git 未提交**：工作树保持修改状态，等用户指令。
 
 ## [0.0.2] - 2026-09-27
 
