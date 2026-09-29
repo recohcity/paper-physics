@@ -1,107 +1,215 @@
-# Paper Trebuchet — Sketch to Physics (纸上投石机)
+<div align="center">
 
-一个融合**工程手绘图纸美学**与**实时刚体物理动力学**的交互式 3D 投石机仿真演示项目。项目重现了从“草稿纸上的铅笔素描”无缝渐变为“具有重力质量与碰撞破坏力的真实物理木模”的完整体验。
+<img src="src/Paper-Trebuchet.png" alt="Paper Trebuchet — Sketch to Physics" width="100%" />
 
----
+# Paper Trebuchet — Sketch to Physics
 
-## ✨ 核心特性
+**An interactive 3D trebuchet simulation that grows from a hand-drawn blueprint into a real-time rigid-body physics model.**
 
-### 1. 手绘草图到 3D 实体的无缝蜕变 (Sketch to Model)
-- **手绘图纸工作台**：场景基于真实书桌与泛黄素描纸，搭配桌面铅笔、蓝白经典橡皮擦等静物细节。
-- **平滑变形 (Morph)**：通过滑块可在「2D 铅笔设计图」与「3D 真实巴尔萨木（Balsa）模型」之间自由过渡。
-- **手绘标注系统**：投石机运转时，2D 覆盖层会以手绘铅笔笔触实时绘制出射抛物线与力学参数。
+[English](#english) · [中文](#中文)
 
-### 2. 精确的刚体物理引擎 (Cannon-es Physics)
-- **真实重力势能驱动**：利用杠杆原理，右侧配重箱在重力下猛烈下坠，带动左侧长臂高速旋转并甩出抛射钢球。
-- **木块积木目标金字塔**：目标区域由 10 块标准正方体木块以 4-3-2-1 阵列堆叠而成。钢球命中后会引发真实的多体碰撞、倒塌与飞溅效果。
-- **实时数据监控**：
-  - **SPEED**：钢球出射初速度（m/s）
-  - **ANGLE**：发射仰角（°）
-  - **RANGE**：落点水平射程（mm）
-  - **DOWN**：被击倒的木块计数统计（X/10）
-
-### 3. 直观的手势交互与物理防穿透
-- **直接拖拽蓄力**：支持鼠标或触控直接按住勺子（3D 半球木托）向下拖拽蓄力，松手即可发射。
-- **物理地表接触限制**：基于几何解析切线解，计算出勺子底部贴合纸面的极限拉角（$84.5^\circ$），勺子在任何拖拽力度下都不会发生嵌入桌面的穿模现象。
-- **丰富音效与特效**：内置木质机件受力声、释放呼啸声、钢球与木块撞击声，以及全倒触发的彩屑纸花。
-
-### 4. 双模式体验
-- **Play the tour (叙事演示模式)**：通过底部播放轴进度条自动演示“从轻量配重抛射不足、到过重配重抛过，再到精准调试命中”的工程调校故事。
-- **Build it yourself (自主调校模式)**：自由控制面板，支持：
-  - **WEIGHT**：配重调节（0.30 kg ～ 1.00 kg，配重箱内的铅块与沙量实时变化）
-  - **THROW**：拉拽角度精准微调（0° ～ 84.5°）
-  - **VIEW**：视角无缝切换（Hero 视角 / Side 正侧视角 / Top 俯视视角）
-  - **Slow motion**：0.25× 慢动作微观慢放观测
+</div>
 
 ---
 
-## 🛠️ 技术栈
+## English
 
-- **3D 渲染**：[Three.js](https://threejs.org/) (r160)
-- **物理引擎**：[Cannon-es](https://pmndrs.github.io/cannon-es/) (v0.20.0)
-- **动画缓动**：[@tweenjs/tween.js](https://github.com/tweenjs/tween.js)
-- **粒子纸屑**：[canvas-confetti](https://www.kirilv.com/canvas-confetti/)
-- **构建工具**：[Vite](https://vitejs.dev/)
+### Overview
 
----
+Paper Trebuchet is a demonstration-grade interactive 3D simulation that reproduces the full journey from a
+pencil sketch on engineering paper to a physically simulated balsa-wood trebuchet with gravitational
+drive, hinged-lever dynamics, and a collapsible 10-block target pyramid. It is also the worked example of
+the [`skill/sketch2sim`](./skill/sketch2sim/SKILL.md) project: every physical quantity in the demo carries
+provenance, and the mechanism design was validated by a Lagrangian reference solver cross-checked against
+the in-browser physics engine before the UI was built.
 
-## 🚀 快速上手
+### Highlights
 
-### 环境要求
-- [Node.js](https://nodejs.org/) (建议 v18 及以上版本)
-- npm / pnpm / yarn
+- **Sketch → 3D morph** — a 4-stage transition (blueprint → lifted 2D cutouts → white model → textured
+  balsa model) with a slideable morph control and hand-drawn-style annotations on a 2D canvas overlay.
+- **Real hinge dynamics, no fitted formulas** — the throwing arm and the hanging counterweight are two
+  Cannon-es rigid bodies joined by `HingeConstraint`s and driven purely by gravity. Launch speed and angle
+  are read from the physics state (`v = ω × r`), so changing an arm length, mass or pin position actually
+  changes the result.
+- **Feasible, cross-validated mechanism** — per the sketch2sim audit fix plan A: counterweight pin moved to
+  0.30 m, 1 scene unit = 1 m as the single scale anchor, and the rig cross-validated between the reference
+  solver and Cannon-es within ~1% on speed and ~3% on angle (5/5 variants).
+- **Hovering counterweight** — the counterweight box hangs on its hanger rod 20 mm above the deck at rest
+  (no deck impact, natural swing decay after a shot).
+- **8-step guided tour** — blueprint → outline lift → white model → wood material → **parts annotations**
+  (7 components with real-mesh anchors and collision-free curved leaders) → drag-to-fire demonstration →
+  slow-motion full replay → **build it yourself**. The scrubber lets you jump to any step, and clicking a
+  step plays only that step then pauses.
+- **Scene props are physical** — the pencil and the blue-and-white eraser have real static colliders: the
+  ball and blocks collide with them instead of passing through.
+- **Dual mode** — *Play the tour* (narrative playback) and *Build it yourself* (full control panel:
+  counterweight 1.40–3.00 kg, ball 0.30–0.60 kg sized to the cup bore, pull angle 0–84.5°, slow motion,
+  Hero/Side/Top views, live SPEED / POWER / RANGE / DOWN readouts in SI units).
 
-### 安装依赖
+### Physics specification (v0.0.3)
+
+| Parameter | Value | Notes |
+|---|---|---|
+| Scale anchor | 1 scene unit = 1 m | gravity, masses, density, display all derive from it |
+| Arm extent | x ∈ [−0.596, 0.315] m | short arm (pin) at 0.30 m |
+| Counterweight hanger | pin at 0.30, hang 0.10 m | hovering, 20 mm above deck at rest |
+| Counterweight | 1.40 – 3.00 kg (default 2.60) | sand fill follows the slider (full = 3.0 kg) |
+| Ball | 0.30 – 0.60 kg (default 0.45) | diameter = 60% → 80% of the 100 mm cup bore |
+| Blocks | 0.11³ m, 0.30 kg each | wood–wood friction 0.35, damped |
+| Release angle | ~31° (−1.00 rad stop) | geometry-derived, identical every shot |
+| Launch (default) | 3.25 m/s, down ≈ 3/10 in-browser | reference solver 3.30 m/s (cross-check < 3%) |
+| Tour | 8 steps | parts annotations, drag demo, 0.25× replay, BUILD end state |
+
+### Tech stack
+
+- [Three.js](https://threejs.org/) (r160) — 3D rendering
+- [Cannon-es](https://pmndrs.github.io/cannon-es/) (v0.20.0) — rigid-body physics
+- [@tweenjs/tween.js](https://github.com/tweenjs/tween.js) — animation easing
+- [canvas-confetti](https://www.kirilv.com/canvas-confetti/) — particle effects
+- [Vite](https://vitejs.dev/) — build tool
+
+### Getting started
+
 ```bash
 npm install
+npm run dev        # local dev server (default http://localhost:5173)
+npm run build      # production build → dist/
+npm run preview    # preview the production build
 ```
 
-### 启动本地开发服务
-```bash
-npm run dev
-```
-启动后在浏览器中打开提示的本地地址（默认通常为 `http://localhost:5173`）即可运行。
+Requires Node.js ≥ 18.
 
-### 打包构建生产版本
-```bash
-npm run build
-```
-打包产物将输出在 `dist/` 目录下。
-
-### 预览构建产物
-```bash
-npm run preview
-```
-
----
-
-## 📂 项目文件架构
+### Project structure
 
 ```text
 paper-trebuchet/
-├── index.html            # 主页面骨架与 UI 控制面板
-├── package.json          # 项目依赖与运行脚本
-├── dist/                 # 生产打包产物
+├── index.html            # page shell + control panels
+├── package.json
+├── dist/                 # production build
 └── src/
-    ├── main.js           # 应用程序主入口、拖拽手势交互、视图与 UI 控制逻辑
-    ├── trebuchet.js      # 投石机 3D 参数化几何建模（长臂、木托、销轴、配重等）
-    ├── physics.js        # Cannon-es 物理世界、刚体模拟、投石球及 10 块正方体积木塔
-    ├── environment.js    # 书桌、素描纸、铅笔、橡皮擦与光影环境
-    ├── textures.js       # 程序化纹理（木纹、草稿纸网格与手绘蓝图等）
-    ├── annotations.js    # Canvas 2D 笔迹标注层（手绘抛物线与物理数据标注）
-    ├── audio.js          # Web Audio 音效系统（受力、释放、撞击声音）
-    └── style.css         # 页面样式与毛玻璃控制面板布局
+    ├── spec.js           # single source of truth (MECH physics / GEOM 3D / UI sliders)
+    ├── main.js           # app entry, tour controller, drag interaction, UI
+    ├── trebuchet.js      # parameterized 3D trebuchet model
+    ├── physics.js        # Cannon-es world, hinged mechanism, ball, blocks, prop colliders
+    ├── environment.js    # desk, paper, pencil & eraser props
+    ├── textures.js       # procedural textures (wood, paper, blueprint)
+    ├── annotations.js    # 2D canvas overlay (flight path, part labels, drag hints)
+    ├── audio.js          # Web Audio sound effects
+    └── style.css
 ```
+
+### Controls
+
+| Action | Description |
+|---|---|
+| Drag the cup | hold and pull down to cock, release to fire |
+| View | mouse drag to orbit; scroll or zoom slider to zoom; Hero / Side / Top presets |
+| WEIGHT / BALL | counterweight and ball mass sliders (mechanism rebuilds live) |
+| THROW | fine pull-angle adjustment (0° – 84.5°) |
+| Slow motion | 0.25× replay |
+| Tour | Play the tour / scrubber / Build it yourself |
+
+### Skill feedback loop
+
+The build is the instance project of [`skill/sketch2sim`](./skill/sketch2sim/SKILL.md): the audit history
+(V2–V5), the architecture checklist and the 17 physics pitfalls all live there, and every round of this
+demo's fixes has been folded back into the skill's checklist. See
+[`skill/sketch2sim/audit/paper-trebuchet-audit.md`](./skill/sketch2sim/audit/paper-trebuchet-audit.md).
 
 ---
 
-## 🕹️ 操作指引
+## 中文
 
-| 操作 | 动作说明 |
-| :--- | :--- |
-| **拖拽拉动** | 鼠标左键按住投石机末端的勺子向下拖动进行蓄力，松开即刻发射 |
-| **旋转视角** | 在空白区域按住鼠标左键并拖拽，可 360° 旋转观察场景 |
-| **视角缩放** | 滑动滚轮或调节左下角缩放滑块（Zoom） |
-| **配重调节** | 右侧面板滑动 WEIGHT 滑块，配重越大，投石机长臂爆发速度越高 |
-| **模式切换** | 点击左下方「Play the tour」进入自动演示，或「Build it yourself」进入自由操作 |
-| **慢动作回放** | 开启「Slow motion」可在发射时以 0.25× 慢放细致观测力学运动 |
+### 项目简介
+
+纸上投石机（Paper Trebuchet）是一个演示级的交互式 3D 仿真项目：从工程纸上的铅笔素描开始，无缝演变为
+带重力驱动、真实铰链动力学与可碰撞倒塌金字塔目标的巴尔萨木投石机 3D 模型。它同时也是
+[`skill/sketch2sim`](./skill/sketch2sim/SKILL.md) 的实例项目——每个物理量都有来源标注，机构可行性在
+搭建 UI 之前就已通过拉格朗日参考解算器与浏览器物理引擎的交叉验证。
+
+### 核心特性
+
+- **草图 → 3D 渐变**：四阶段过渡（图纸 → 2D 纸片立起 → 白模 → 木纹材质），滑块自由控制形态，
+  2D 画布叠加手绘风格标注。
+- **真实铰链动力学（无拟合公式）**：投石臂与悬垂配重是两个 Cannon-es 刚体，由两个
+  `HingeConstraint` 铰链连接、纯重力驱动；出射速度与仰角从物理状态实时读出（v = ω × r），
+  改动臂长 / 质量 / 销轴位置会真实改变结果。
+- **可行机构（已交叉验证）**：按 sketch2sim 审计方案 A——配重销轴移至 0.30 m、统一尺度锚点
+  （1 单位 = 1 m）；解算器与 Cannon-es 速度差 <1%、角度差 <3%（5/5 变体通过）。
+- **配重箱悬停**：静止时吊于挂杆、盒底离甲板 20 mm，发射后自然摆动衰减，不撞击甲板。
+- **8 步引导 tour**：图纸 → 轮廓立起 → 白模 → 材质 → **部件标注**（7 个部件、锚点取真实
+  mesh 世界坐标、曲线引线防重叠）→ 拖拽发射示意 → 慢镜完整回放 → **build it yourself**；
+  滑条可跳任意步骤，点热点只播放该步骤后暂停。
+- **道具真实物理**：铅笔与蓝白橡皮擦带真实静态碰撞体，球与方块不再穿透。
+- **双模式**：*Play the tour*（叙事播放）与 *Build it yourself*（自由调校面板：
+  配重 1.40–3.00 kg、球 0.30–0.60 kg 按碗内径比例、拉角 0–84.5°、慢动作、Hero/Side/Top 视角、
+  SPEED / POWER / RANGE / DOWN 实时读数，统一米制）。
+
+### 物理规格（v0.0.3）
+
+| 参数 | 数值 | 说明 |
+|---|---|---|
+| 尺度锚点 | 1 场景单位 = 1 m | 重力 / 质量 / 密度 / 显示单位统一推导 |
+| 臂范围 | x ∈ [−0.596, 0.315] m | 短臂（销轴）0.30 m |
+| 配重吊挂 | 销轴 0.30、悬吊 0.10 m | 悬停，静止离甲板 20 mm |
+| 配重 | 1.40 – 3.00 kg（默认 2.60） | 透明箱沙量随滑块联动（满箱 = 3.0 kg） |
+| 球 | 0.30 – 0.60 kg（默认 0.45） | 直径 = 碗内径 100 mm 的 60% → 80% |
+| 方块 | 0.11³ m、0.30 kg/块 | 木-木摩擦 0.35，带阻尼 |
+| 释放角 | ~31°（停止位 −1.00 rad） | 几何决定，每次发射相同 |
+| 默认发射 | 浏览器实测 3.25 m/s、down≈3/10 | 解算器 3.30 m/s（交叉验证 <3%） |
+| Tour | 8 步 | 部件标注、拖拽示意、0.25× 回放、BUILD 终态 |
+
+### 技术栈
+
+- [Three.js](https://threejs.org/) (r160) — 3D 渲染
+- [Cannon-es](https://pmndrs.github.io/cannon-es/) (v0.20.0) — 刚体物理
+- [@tweenjs/tween.js](https://github.com/tweenjs/tween.js) — 动画缓动
+- [canvas-confetti](https://www.kirilv.com/canvas-confetti/) — 粒子特效
+- [Vite](https://vitejs.dev/) — 构建工具
+
+### 快速上手
+
+```bash
+npm install
+npm run dev        # 本地开发（默认 http://localhost:5173）
+npm run build      # 生产构建 → dist/
+npm run preview    # 预览生产构建
+```
+
+需要 Node.js ≥ 18。
+
+### 项目结构
+
+```text
+paper-trebuchet/
+├── index.html            # 页面骨架与控制面板
+├── package.json
+├── dist/                 # 生产构建产物
+└── src/
+    ├── spec.js           # 运行时单一数据源（MECH 物理 / GEOM 3D / UI 滑块）
+    ├── main.js           # 应用入口、tour 控制器、拖拽交互、UI
+    ├── trebuchet.js      # 参数化投石机 3D 模型
+    ├── physics.js        # Cannon-es 物理世界、铰链机构、球、方块、道具碰撞体
+    ├── environment.js    # 书桌、纸、铅笔与橡皮擦道具
+    ├── textures.js       # 程序化纹理（木纹、纸、蓝图）
+    ├── annotations.js    # 2D 画布叠加层（飞行轨迹、部件标注、拖拽示意）
+    ├── audio.js          # Web Audio 音效
+    └── style.css
+```
+
+### 操作指引
+
+| 操作 | 说明 |
+|---|---|
+| 拖拽碗 | 按住下拉蓄力，松开发射 |
+| 视角 | 鼠标拖拽环绕；滚轮 / 缩放滑块；Hero / Side / Top 预设 |
+| WEIGHT / BALL | 配重与球质量滑块（机构实时重建） |
+| THROW | 拉角微调（0° – 84.5°） |
+| 慢动作 | 0.25× 慢镜回放 |
+| Tour | Play the tour / 滑条跳步 / Build it yourself |
+
+### skill 反哺闭环
+
+本项目是 [`skill/sketch2sim`](./skill/sketch2sim/SKILL.md) 的实例项目：审计记录（V2–V5）、架构检查清单与
+17 条物理陷阱全部沉淀在 skill 中，本 demo 每一轮修复都反哺回 skill 的检查清单。详见
+[`skill/sketch2sim/audit/paper-trebuchet-audit.md`](./skill/sketch2sim/audit/paper-trebuchet-audit.md)。

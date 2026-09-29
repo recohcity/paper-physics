@@ -1,5 +1,14 @@
 import * as THREE from 'three';
 
+// ---------------------------------------------------------------------------
+// SCALE ANCHOR (single source of truth, fixes audit F3):
+//   1 scene unit = 1 m.
+//   Gravity (9.82 in physics.js), masses (kg), and display units (×1000 -> mm
+//   in main.js) are all derived from this anchor.  Desk props below (paper,
+//   pencil, eraser) are VISUAL DESIGN sizes on a prop tabletop, deliberately
+//   NOT scaled from mm to scene units — they are not physics objects and are
+//   not part of any mm-based measurement.
+// ---------------------------------------------------------------------------
 export class Environment {
   constructor(scene, woodTableTexture, paperTexture, paperCleanTexture) {
     this.scene = scene;
@@ -51,15 +60,15 @@ export class Environment {
 
   createPencil() {
     const pencilGroup = new THREE.Group();
-    // A4 scale: 2.7 units = 297mm -> 1mm ≈ 0.00909 units.
-    // Standard sharpened pencil with eraser: length ≤ 190mm (~180mm -> 1.63 units), diameter 7.8mm (~0.071 units, radius 0.0355).
-    const pencilR = 0.0355; // 7.8mm diameter / 2
+    // Prop sheet: 2.7 × 1.85 scene units (= 2.7 × 1.85 m at the 1 unit = 1 m
+    // anchor).  It is a desk prop of A4 aspect ratio, not a literal A4 sheet.
+    const pencilR = 0.0355; // visual prop radius (design value, not mm-derived)
     const paperY = 0.006;
     pencilGroup.position.set(-0.05, paperY + pencilR, -0.73);
     pencilGroup.rotation.y = 0.04;
 
     // 1. Hexagonal wooden body (warm cedar lacquer)
-    const bodyLength = 1.25; // ~138mm
+    const bodyLength = 1.0; // ~110mm (shortened to 80% of the original 1.25)
     const bodyGeom = new THREE.CylinderGeometry(pencilR, pencilR, bodyLength, 6);
     bodyGeom.rotateZ(Math.PI / 2);
     const bodyMat = new THREE.MeshStandardMaterial({
@@ -123,15 +132,26 @@ export class Environment {
     ferrule.receiveShadow = true;
     pencilGroup.add(ferrule);
 
-    // 5. Pink rubber eraser top
+    // 5. Pink rubber eraser top — ONE seamless lathe body (straight sides then a
+    //    convergent rounded top). No cylinder+cap seam, no hemisphere: the whole
+    //    tip is a single smooth surface, poking out only ~5mm past the ferrule.
     const eraserLength = 0.09; // ~10mm
     const eraserR = pencilR * 0.98;
-    const eraserGeom = new THREE.CylinderGeometry(eraserR, eraserR, eraserLength, 20);
-    eraserGeom.rotateZ(Math.PI / 2);
     const eraserMat = new THREE.MeshStandardMaterial({
       color: 0xeb6b6b,
       roughness: 0.9,
     });
+    const profile = [
+      new THREE.Vector2(0, -eraserLength / 2),                     // left centre (ferrule side)
+      new THREE.Vector2(eraserR, -eraserLength / 2),                // left outer rim
+      new THREE.Vector2(eraserR, eraserLength / 2 - 0.02),          // straight side up to the fillet
+      new THREE.Vector2(eraserR - 0.003, eraserLength / 2 - 0.014), // rounded corner arc (approx)
+      new THREE.Vector2(eraserR - 0.008, eraserLength / 2 - 0.008), // rounded corner arc (approx)
+      new THREE.Vector2(eraserR - 0.013, eraserLength / 2 - 0.003), // rounded corner arc (approx)
+      new THREE.Vector2(0, eraserLength / 2 + 0.005),               // convergent rounded top apex
+    ];
+    const eraserGeom = new THREE.LatheGeometry(profile, 32);
+    eraserGeom.rotateZ(-Math.PI / 2); // axis along X, rounded top toward +X
     const eraser = new THREE.Mesh(eraserGeom, eraserMat);
     eraser.position.set(bodyLength / 2 + ferruleLength + eraserLength / 2, 0, 0);
     eraser.castShadow = true;
@@ -139,18 +159,23 @@ export class Environment {
     pencilGroup.add(eraser);
 
     this.scene.add(pencilGroup);
+    this.pencilGroup = pencilGroup;
   }
 
   createEraser() {
-    // Standard rectangular block eraser:
+    // Standard rectangular block eraser lying flat, HALF pressed onto the pencil:
     // 5.0 ~ 6.0 cm long (~55mm -> 0.50 units)
     // 2.0 ~ 2.5 cm wide (~22mm -> 0.20 units)
     // 1.2 cm thick (~12mm -> 0.109 units)
+    // Its bottom rests on the top of the pencil body (paperY + 2*pencilR = 0.077)
+    // and its centre is offset so ~half the eraser length overlaps the pencil.
     const eraserGroup = new THREE.Group();
     const paperY = 0.006;
     const eraserThickness = 0.109;
-    eraserGroup.position.set(0.96, paperY + eraserThickness / 2, -0.73);
-    eraserGroup.rotation.y = -0.22;
+    // Simply flat on the paper at the TOP-RIGHT corner of the sheet, well clear
+    // of the pencil (paper: centre (0.12, 0.003, 0), 2.7 x 1.85), small yaw.
+    eraserGroup.position.set(1.15, paperY + eraserThickness / 2, -0.75);
+    eraserGroup.rotation.y = 0.3;
 
     const eraserLength = 0.50;
     const eraserWidth = 0.20;
@@ -158,7 +183,7 @@ export class Environment {
     // White rubber block
     const whiteGeom = new THREE.BoxGeometry(eraserLength, eraserThickness, eraserWidth);
     const whiteMat = new THREE.MeshStandardMaterial({
-      color: 0xf5f5f5,
+      color: 0xdedede, // light grey so the rubber reads against the near-white paper
       roughness: 0.88,
     });
     const whiteBlock = new THREE.Mesh(whiteGeom, whiteMat);
@@ -180,6 +205,7 @@ export class Environment {
     eraserGroup.add(sleeve);
 
     this.scene.add(eraserGroup);
+    this.eraserGroup = eraserGroup;
   }
 
   hidePaperSketch() {

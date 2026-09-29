@@ -436,13 +436,13 @@ export function createLeadTexture() {
     ctx.fillRect(x, y, 1.5, 1.5);
   }
 
-  // Weight stamp "0.68 kg"
+  // Weight stamp "1.00 kg"
   ctx.save();
   ctx.fillStyle = 'rgba(190, 195, 205, 0.45)';
   ctx.font = 'bold 26px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('0.68 kg', 128, 128);
+  ctx.fillText('1.00 kg', 128, 128);
   ctx.restore();
 
   const texture = new THREE.CanvasTexture(canvas);

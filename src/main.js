@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as TWEEN from '@tweenjs/tween.js';
 import confetti from 'canvas-confetti';
 
@@ -11,6 +12,7 @@ import {
   createBalsaTexture,
   createLeadTexture
 } from './textures.js';
+import { GEOM, UI } from './spec.js';
 import { PhysicsWorld } from './physics.js';
 import { TrebuchetModel } from './trebuchet.js';
 import { Environment } from './environment.js';
@@ -47,6 +49,8 @@ class App {
     this.btnToggleFlightPath = document.getElementById('btn-toggle-flightpath');
     this.weightSlider = document.getElementById('weight-slider');
     this.weightLabel = document.getElementById('weight-label');
+    this.ballSlider = document.getElementById('ball-slider');
+    this.ballLabel = document.getElementById('ball-label');
     this.morphSlider = document.getElementById('morph-slider');
     this.btnViewHero = document.getElementById('btn-view-hero');
     this.btnViewSide = document.getElementById('btn-view-side');
@@ -65,7 +69,8 @@ class App {
     // Simulation settings
     this.slowMotion = false;
     this.timeScale = 1.0;
-    this.counterweightKg = 0.68;
+    this.counterweightKg = UI.counterweight.value; // hover recalibration — spec.js (2.6 kg throws the 0.45 kg ball onto the pyramid)
+    this.ballKg = UI.ball.value; // solid steel projectile — spec.js (density 7850 kg/m³, r = 60% of the 100 mm bowl opening)
     this.flightPathEnabled = true;
     this.isTourRunning = true;
     this.isTourPlaying = false;
@@ -94,6 +99,11 @@ class App {
     this.dragPointerWorld = new THREE.Vector3();
     this.dragPivotWorld = new THREE.Vector3();
     this.dragGrabOffsetY = 0;
+
+    // Recoil: the chassis kicks back on release (momentum conservation) and
+    // returns on a damped spring.  baseX = group.position.x (-0.72).
+    this.recoilVel = 0;
+    this.recoilBaseX = -0.72;
 
     this.initThree();
     this.initPhysics();
@@ -134,6 +144,19 @@ class App {
 
     this.container.appendChild(this.renderer.domElement);
 
+    // Free 360° navigation with the standard controls: mouse LEFT-drag orbits,
+    // wheel zooms, middle/right-drag pans; trackpad pinch zooms; WASD / arrow
+    // keys pan, +/- zoom once the canvas has focus. Left-click on the spoon is
+    // still the cup drag — OrbitControls is disabled for that grab below.
+    this.renderer.domElement.tabIndex = 1;
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.target.set(0.15, 0.35, 0);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
+    this.controls.minDistance = 0.4;
+    this.controls.maxDistance = 8;
+    this.controls.update();
+
     // Warm natural afternoon lighting
     const ambientLight = new THREE.AmbientLight(0xffeed9, 0.95);
     this.scene.add(ambientLight);
@@ -169,12 +192,32 @@ class App {
     // 1. Create target 10 wooden cube pyramid on the right
     this.physics.createBlocks(this.scene, this.balsaTexture);
 
-    // 2. Create polished steel projectile
+    // 2. Create the 0.45 kg projectile (r=30 mm, 60% of bowl opening, metal)
     this.physics.createProjectile(this.scene);
 
     // 3. Create Trebuchet wooden model on the left
     this.trebuchet = new TrebuchetModel(this.scene, this.balsaTexture, this.leadTexture);
     this.trebuchet.setCounterweight(this.counterweightKg);
+    // Keep the UI sliders in sync with the physics-calibrated defaults (2.60 kg
+    // counterweight, 0.45 kg steel ball — hover recalibration, see CHANGELOG).
+    if (this.weightSlider) this.weightSlider.value = this.counterweightKg;
+    if (this.weightLabel) this.weightLabel.textContent = `${this.counterweightKg.toFixed(2)} kg`;
+    if (this.ballSlider) this.ballSlider.value = this.ballKg;
+    if (this.ballLabel) this.ballLabel.textContent = `${this.ballKg.toFixed(2)} kg`;
+
+    // 4. Real hinge mechanism (audit fix plan A): the arm and the hanging
+    //    counterweight become Cannon bodies joined by two hinge constraints,
+    //    driven purely by gravity when fired. This replaces the fitted
+    //    acceleration/launch formulas that previously animated the arm.
+    const pivot = new THREE.Vector3();
+    this.trebuchet.armPivot.getWorldPosition(pivot);
+    this.physics.createMechanism(pivot.x, pivot.y, this.trebuchet.REST_ANGLE);
+    // Push the UI-default counterweight into the mechanism: createMechanism()
+    // builds the cw body with the physics-constructor default (1.0 kg) and no
+    // setCwMass() was called before, so the DEFAULT slider value 2.60 never
+    // reached the physics body — the arm hung cocked like the ball outweighed
+    // the box (mechanism inversion).  Re-assert it now (and on every rebuild).
+    this.physics.setCwMass(this.counterweightKg);
 
     // Apply env map only to metal materials
     if (this.envMapTexture) {
@@ -212,6 +255,9 @@ class App {
       this.paperCleanTexture
     );
     this.initSketchCutout();
+    // Desk props (pencil & eraser) get real static colliders so the iron ball
+    // and blocks collide with them instead of passing through.
+    this.physics.addPropColliders(this.environment.pencilGroup, this.environment.eraserGroup);
   }
 
   initSketchCutout() {
@@ -278,11 +324,19 @@ class App {
   }
 
   // Update projectile position while resting in the wooden cup
+  // Update projectile position while resting in the wooden cup.  The ball sits
+  // on the inner bowl floor (cup centre - (cupR - ballR) along world -y) so it
+  // is visibly inside the bowl; while the arm is dragged the cup tilts and the
+  // ball settles to the low side (the "back" bowl wall), like a real ball in a
+  // spoon.  A simple position-driven roll — free-contact rolling inside a
+  // concave bowl is not available in cannon-es and has negligible effect on
+  // release speed for a 0.05 m shallow bowl.
   updateBallInCup() {
     if (!this.physics.ballReleased) {
       const cupPos = this.trebuchet.getCupWorldPosition();
-      this.physics.ballMesh.position.copy(cupPos);
-      this.physics.ballBody.position.set(cupPos.x, cupPos.y, cupPos.z);
+      const restOffset = this.trebuchet.cupR - this.physics.ballRadius;
+      this.physics.ballMesh.position.set(cupPos.x, cupPos.y - restOffset, cupPos.z);
+      this.physics.ballBody.position.set(cupPos.x, cupPos.y - restOffset, cupPos.z);
       this.physics.ballBody.velocity.set(0, 0, 0);
       this.physics.ballBody.angularVelocity.set(0, 0, 0);
     }
@@ -329,16 +383,22 @@ class App {
     if (duration === 0) {
       this.camera.position.copy(targetPos);
       this.camera.lookAt(look);
+      this.controls.target.copy(look);
+      this.controls.update();
       this.isCameraTransitioning = false;
       this.updateDragHint();
       return;
     }
 
+    this.controls.enabled = false; // camera animation owns the view
     new TWEEN.Tween(this.camera.position)
       .to(targetPos, duration)
       .easing(TWEEN.Easing.Cubic.Out)
       .onComplete(() => {
         if (transitionId === this.cameraTransitionId) {
+          this.controls.target.copy(look);
+          this.controls.enabled = true;
+          this.controls.update();
           this.isCameraTransitioning = false;
           this.updateDragHint();
         }
@@ -367,6 +427,8 @@ class App {
         this.trebuchet.setPullAngle(deg);
         this.updateBallInCup();
       }
+      // Keep the locked (pre-fire) mechanism pose in sync with the 3D model.
+      if (this.physics) this.physics.setCocked(deg);
       if (this.annotations && this.trebuchet) {
         this.annotations.setWeight(this.counterweightKg, this.trebuchet.getCounterweightWorldPosition());
       }
@@ -374,6 +436,15 @@ class App {
   }
 
   // Set counterweight mass
+  // Set projectile mass (solid steel: radius follows density) and rebuild the
+  // hinge mechanism so arm mass/inertia include the new ball.
+  setBallMass(kg) {
+    this.ballKg = kg;
+    if (this.ballLabel) this.ballLabel.textContent = `${kg.toFixed(2)} kg`;
+    this.physics.setBall(kg);
+    this.updateBallInCup();
+  }
+
   setWeight(kg) {
     this.counterweightKg = kg;
     if (this.weightSlider) this.weightSlider.value = kg;
@@ -381,147 +452,186 @@ class App {
     if (this.trebuchet) {
       this.trebuchet.setCounterweight(kg);
     }
+    if (this.physics) this.physics.setCwMass(kg);
     if (this.annotations && this.trebuchet) {
       this.annotations.setWeight(kg, this.trebuchet.getCounterweightWorldPosition());
     }
   }
 
-  // Fire trebuchet physics.  Button firing can auto-cock for the guided tour;
-  // drag firing always uses the exact pull held by the user.
+  // Fire the trebuchet.  The arm is a real hinged rigid body now (audit F1/F2
+  // fix): fire() releases the mechanism (KINEMATIC -> DYNAMIC) and gravity
+  // drives it through the counterweight pendulum.  Release speed and angle are
+  // read back from the physics state at the stop angle — no fitted formulas.
   fire(fromDrag = false) {
+    // Reset recoil state before this launch (a previous shot may still have
+    // been mid-return when the user refired).
+    this.recoilVel = 0;
+    this.trebuchet.group.position.x = this.recoilBaseX;
     if (this.isFiring) return;
 
     // Keep the existing button shortcut, but never turn a simple spoon click
     // into a launch: only a completed downward drag calls fire(true).
     if (!fromDrag && this.pullDeg < 10) {
-      this.setPullAngle(45);
+      this.setPullAngle(84.5);
     }
 
     this.isFiring = true;
+    this.physics.resetImpact();
     sound.playLaunch();
 
     this.annotations.clear();
     this.physics.ballReleased = false;
     this.physics.wakeBlocks();
+    this.physics.releaseMechanism(); // let gravity + hinges drive the arm
 
-    // Current angle: cocked angle
-    let currentArmAngle = this.trebuchet.REST_ANGLE + THREE.MathUtils.degToRad(this.pullDeg);
-    const stopAngle = this.trebuchet.REST_ANGLE; // Black counterweight strikes chassis floor & STOPS!
+    this.fireStartTime = performance.now();
+    const cupPos = this.trebuchet.getCupWorldPosition();
+    this.launchPos = cupPos.clone();
+    this.launchSpeedVal = 0;
+    this.launchAngleVal = 0;
+  }
 
-    // Gravitational acceleration downwards:
-    // Torque = m_cw * g * L_short
-    // Heavier counterweight = faster downward plunge = greater launch force & speed!
-    const cwMass = this.counterweightKg;
-    const pullRatio = THREE.MathUtils.clamp(this.pullDeg / this.MAX_PULL_DEG, 0, 1);
-    const accelMultiplier = 34.0 * (cwMass / 0.68) * (0.75 + pullRatio * 0.85);
+  // Per-frame update while firing: sync the 3D arm/counterweight from the
+  // physics bodies and detect the release moment (arm reaches REST_ANGLE).
+  updateMechanism() {
+    if (!this.isFiring) return;
 
-    this.armVelocity = 0;
-    const startTime = performance.now();
-    let released = false;
-    // Pendulum + recoil state
-    let cwSwingT = 0;       // time since cw started moving
-    let recoilX = 0;
-    let recoilVel = 0;
-    let cwRestAngle = stopAngle;
+    if (!this.physics.ballReleased) {
+      // Sync 3D pose from the real hinge dynamics
+      const ang = this.physics.getArmAngle();
+      const omega = this.physics.getArmOmega();
+      this.trebuchet.armPivot.rotation.z = ang;
+      this.trebuchet.cwGroup.rotation.z = this.physics.getCwRelAngle();
+      this.updateBallInCup();
 
-    const launchLoop = () => {
-      if (!this.isFiring) return;
-
-      const dt = 0.016 * this.timeScale;
-
-      if (!released) {
-        cwSwingT += dt;
-        // Counterweight plunges DOWNWARDS under gravity
-        this.armVelocity += accelMultiplier * dt;
-        currentArmAngle -= this.armVelocity * dt;
-
-        // Small pendulum during arm motion: proportional to arm angular velocity
-        const pendulumAngle = 0.09 * Math.sin(cwSwingT * 9) * Math.min(1, this.armVelocity * 0.3);
-
-        // Has counterweight reached the ground/chassis stop?
-        if (currentArmAngle <= stopAngle) {
-          currentArmAngle = stopAngle;
-          this.trebuchet.armPivot.rotation.z = currentArmAngle;
-          // Cw lands: pendulum settles to rest angle (no more swinging)
-          this.trebuchet.cwGroup.rotation.z = -stopAngle;
-
-          // FLING THE BALL!
-          released = true;
-          this.physics.ballReleased = true;
-          cwSwingT = 0; // reset for recoil phase
-
-          const weightRatio = this.counterweightKg / 0.68;
-          const launchSpeed = 3.55 * Math.sqrt(weightRatio) * (0.80 + 0.40 * pullRatio);
-          const launchAngleRad = THREE.MathUtils.degToRad(32.0);
-
-          const vx = launchSpeed * Math.cos(launchAngleRad);
-          const vy = launchSpeed * Math.sin(launchAngleRad);
-          const vz = (Math.random() - 0.5) * 0.015;
-
-          const cupPos = this.trebuchet.getCupWorldPosition();
-          this.physics.ballMesh.position.copy(cupPos);
-          this.physics.ballBody.position.set(cupPos.x, cupPos.y, cupPos.z);
-          this.physics.ballBody.velocity.set(vx, vy, vz);
-          this.physics.ballBody.wakeUp();
-
-          this.statSpeed.textContent = `${launchSpeed.toFixed(2)} m/s`;
-          this.statAngle.textContent = `32°`;
-          this.launchPos = cupPos.clone();
-          this.launchSpeedVal = launchSpeed;
-          this.launchAngleVal = 32;
-          sound.playBlockHit(0.5);
-        } else {
-          this.trebuchet.armPivot.rotation.z = currentArmAngle;
-          this.trebuchet.cwGroup.rotation.z = -currentArmAngle + pendulumAngle;
-          this.updateBallInCup();
-        }
-      }
-
-      if (released) {
-        cwSwingT += dt;
-        // Recoil: brief backward push, spring-damper returns to rest
-        if (cwSwingT < 0.06) recoilVel = -0.08 * (cwMass / 0.68);
-        recoilVel += (-recoilX * 40 - recoilVel * 6) * dt;
-        recoilX += recoilVel * dt;
-        this.trebuchet.group.position.x = -0.72 + recoilX;
-
-        // Record trajectory arc
-        if (this.flightPathEnabled && this.physics.ballMesh) {
-          this.annotations.addPoint(this.physics.ballMesh.position);
-        }
-
-        // Check if ball landed on table or flew past target
-        if (this.physics.ballBody.position.y <= 0.055 || this.physics.ballBody.position.x > 2.2) {
-          const rangeDist = Math.max(0, this.physics.ballMesh.position.x - this.launchPos.x);
-          this.finishShot(rangeDist);
-          return;
-        }
-      }
-
-      // Safety timeout
-      if (performance.now() - startTime > 6500) {
-        this.finishShot(2.15);
+      // Release the instant the arm hits the stop angle.  The arm sweeps
+      // ~5° per RAF frame at release speed, so sampling would over-shoot by
+      // up to several degrees and bias speed/angle.  Interpolate to the exact
+      // stop angle: omega at REST = omega + (domega/dt)*(dt) — linear over one
+      // frame is accurate to well under 1% at these accelerations.
+      if (ang <= this.trebuchet.REST_ANGLE && this._lastArmAng !== undefined) {
+        const span = this._lastArmAng - ang;
+        const frac = span > 1e-9 ? (this._lastArmAng - this.trebuchet.REST_ANGLE) / span : 1;
+        const omegaRelease = this._lastArmOmega + (omega - this._lastArmOmega) * Math.min(1, Math.max(0, frac));
+        this._lastArmAng = undefined;
+        this.releaseBall(omegaRelease);
         return;
       }
+      if (ang <= this.trebuchet.REST_ANGLE) {
+        this.releaseBall(omega);
+        return;
+      }
+      this._lastArmAng = ang;
+      this._lastArmOmega = omega;
 
-      requestAnimationFrame(launchLoop);
-    };
+      // Safety timeout: counterweight too light / pull too small to reach the
+      // stop angle at all (mirrors the previous launch-loop timeout).
+      if (performance.now() - this.fireStartTime > 6500) {
+        this.finishShot(2.15);
+      }
+      return;
+    }
 
-    launchLoop();
+    // Ball is in flight.  The arm stays pinned at REST; the counterweight keeps
+    // its residual swing on the live hinge and then settles back to its
+    // vertical hang (HOVER: it floats 20 mm above the deck — never touches).
+    // Keep syncing the 3D cwGroup to the physics rel angle every frame so the
+    // box visibly whips up, pendulum-decays and settles vertical in the air.
+    this.trebuchet.armPivot.rotation.z = this.trebuchet.REST_ANGLE;
+    this.trebuchet.cwGroup.rotation.z = this.physics.getCwRelAngle();
+    // The 3D box hangs Lc below the arm pin by construction (cwGroup local
+    // offset -0.165), matching the physics hinge — no deck-gap offset needed;
+    // the old -0.006 "paste onto deck" correction is deleted (hover mode).
+
+    // Record the trajectory arc and finish on landing.
+    if (this.flightPathEnabled && this.physics.ballMesh) {
+      this.annotations.addPoint(this.physics.ballMesh.position);
+    }
+    const landY = 0.006 + this.physics.ballRadius + 0.006; // radius-aware landing threshold (ball radius follows the BALL slider)
+    if (this.physics.ballBody.position.y <= landY || this.physics.ballBody.position.x > 2.2) {
+      const rangeDist = Math.max(0, this.physics.ballMesh.position.x - this.launchPos.x);
+      this.finishShot(rangeDist);
+      return;
+    }
+    if (performance.now() - this.fireStartTime > 6500) {
+      this.finishShot(2.15);
+    }
+  }
+
+  // Ball leaves the cup with the arm's tangential velocity at the stop angle
+  // (v = ω × r).  Speed and angle come from physics, not formulas (audit F4:
+  // the geometry-derived release angle is ~40°, not the fitted 32°).
+  releaseBall(omegaInterp) {
+    const m = this.physics;
+    const ang = m.getArmAngle();
+    const omega = omegaInterp !== undefined ? omegaInterp : m.getArmOmega();
+
+    // Sync the 3D arm to the EXACT stop angle (not the over-shot sample) so
+    // the cup world position and the release direction match the reference
+    // geometry (~31°, a flatter hit that knocks blocks sideways).
+    this.trebuchet.armPivot.rotation.z = this.trebuchet.REST_ANGLE;
+    const cupPos = this.trebuchet.getCupWorldPosition();
+
+    const pivot = m.getPivotWorld();
+    const rx = cupPos.x - pivot.x;
+    const ry = cupPos.y - pivot.y;
+    const vx = -omega * ry;
+    const vy = omega * rx;
+    const speed = Math.hypot(vx, vy);
+    const angleDeg = (Math.atan2(vy, vx) * 180) / Math.PI;
+    const vz = (Math.random() - 0.5) * 0.015;
+
+    // Pin the arm at the stop angle (the arm has reached the hard stop).
+    m.lockMechanism();
+    this.physics.ballReleased = true;
+    this.trebuchet.armPivot.rotation.z = this.trebuchet.REST_ANGLE;
+    // Do NOT teleport the box to rotation.z=0: at release the box is at rel
+    // ~+98 deg (world ~+41 deg lean).  Hand the 3D group to updateMechanism
+    // which keeps syncing rel every frame, so the box visibly whips up, then
+    // pendulum-decays and settles vertical in mid-air (HOVER — it floats
+    // 20 mm above the deck and never touches it).
+    this.trebuchet.cwGroup.rotation.z = m.getCwRelAngle();
+
+    this.physics.ballMesh.position.copy(cupPos);
+    this.physics.ballBody.position.set(cupPos.x, cupPos.y, cupPos.z);
+    this.physics.ballBody.velocity.set(vx, vy, vz);
+    this.physics.ballBody.wakeUp();
+
+    // Recoil kick: the ball (~0.45 kg @ ~3.5 m/s) carries ~1.6 kg·m/s; against
+    // the full machine (~8 kg incl. the counterweight) that is ~0.2 m/s of
+    // carriage recoil.  Slightly exaggerated so the kick reads on screen while
+    // staying within plausible carriage motion.  The damped spring in animate()
+    // returns the chassis to its base position.
+    this.recoilVel = -0.55;
+
+    this.statSpeed.textContent = `${speed.toFixed(2)} m/s`;
+    this.statAngle.textContent = '—'; // POWER filled at finishShot
+    this.launchPos = cupPos.clone();
+    this.launchSpeedVal = speed;
+    this.launchAngleVal = angleDeg;
+    sound.playBlockHit(0.5);
   }
 
   finishShot(rangeDist) {
     if (!this.isFiring) return;
     this.isFiring = false;
+    // Safety: if the shot ended before release (e.g. counterweight too light),
+    // lock the mechanism bodies back onto the 3D model.
+    if (this.physics && this.physics.mechArmBody) {
+      this.physics.lockMechanism();
+    }
     // Reset recoil position
     this.trebuchet.group.position.x = -0.72;
+    this.recoilVel = 0;
     // Reset arm to rest angle (properly sets cwGroup to hang vertical)
     this.trebuchet.setArmAngle(this.trebuchet.REST_ANGLE);
     this._dragPendulum = 0;
     this._lastDragPull = undefined;
 
     const actualRange = typeof rangeDist === 'number' ? rangeDist : 2.15;
-    this.statRange.textContent = `${Math.round(actualRange * 1000)} mm`;
+    this.statRange.textContent = `${actualRange.toFixed(2)} m`;
+    const imp = this.physics._impactMomentum || 0;
+    this.statAngle.textContent = imp > 0 ? `${imp.toFixed(2)} kg·m/s` : '0.00 kg·m/s';
 
     this.annotations.finishFlight(
       this.launchSpeedVal || 3.55,
@@ -544,6 +654,7 @@ class App {
           this.setPullAngle(0);
           this.physics.ballReleased = false;
           this.updateBallInCup();
+          this.updateDownCount(); // keep DOWN in sync with cascade topples
         }
       }, 1500);
 
@@ -552,6 +663,7 @@ class App {
       setTimeout(() => {
         if (!this.isFiring) {
           this.physics.settleBlocks();
+          this.updateDownCount(); // final DOWN after the pile has settled
         }
       }, 3000);
     }
@@ -606,7 +718,7 @@ class App {
     this.statDownCount.textContent = '0';
     this.statSpeed.textContent = '— m/s';
     this.statAngle.textContent = '— °';
-    this.statRange.textContent = '— mm';
+    this.statRange.textContent = '— m';
   }
 
   resetToFirstFrame() {
@@ -688,14 +800,15 @@ class App {
     }
   }
 
-  // Guided Tour sequence (8-step smooth progression)
-  async playTour() {
+  // Guided Tour sequence — 8 steps.  playTourFrom(startStep) lets the
+  // scrubber seek to any step: it lands on that step's start state, then
+  // replays from there to the end.
+  tourSetup() {
     if (this.tourAbortController) {
       this.tourAbortController.abort();
+      this.tourAbortController = null;
     }
     this.tourAbortController = new AbortController();
-    const signal = this.tourAbortController.signal;
-
     this.isTourRunning = true;
     this.setPlayButtonState(true);
     this.buildPanel.classList.add('hidden');
@@ -704,6 +817,143 @@ class App {
     this.annotations.showTrajectories = true;
     this.annotations.clear();
     this.updateNavButtons('tour');
+  }
+
+  async playTour() {
+    this.tourSetup();
+    await this.playTourFrom(0);
+  }
+
+  // Land the world on step i's START state (no animation), then replay i..7.
+  async seekTourStep(i) {
+    this.tourSetup();
+    this.applyTourStepStart(i);
+    // Play ONLY this step (hotspot view mode): it runs once and pauses at its
+    // end state, so the user can inspect each stage in isolation.  Full replay
+    // (Play the tour) still runs all eight steps in sequence.
+    await this.playTourFrom(i, i);
+  }
+
+  // Step start-state snapshots.  Step i's start = the state after step i-1
+  // finished.  Keep in sync with the step bodies below.
+  applyTourStepStart(i) {
+    const t = this.trebuchet;
+    // Common base (step 1 start): blueprint visible, model hidden
+    this.environment.showPaperSketch();
+    t.group.visible = false;
+    t.setMorphFactor(0);
+    if (this.cutoutMesh) this.cutoutMesh.visible = false;
+    if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
+    this.physics.blockMeshes.forEach(m => m.visible = false);
+    if (this.physics.ballMesh) this.physics.ballMesh.visible = false;
+    this.annotations.setPartLabels(null, 0);
+    this.annotations.hideDragHint();
+    this.setSlowMo(false);
+    this.physics.lockMechanism();
+    this.setPullAngle(0);
+
+    if (i >= 2) { // step 2 start: cutouts flat on paper, sketch hidden, Side view
+      this.environment.hidePaperSketch();
+      if (this.cutoutMesh) {
+        this.cutoutMesh.visible = true;
+        this.cutoutMesh.rotation.x = -Math.PI / 2;
+        this.cutoutMesh.material.opacity = 1;
+      }
+      if (this.blocksCutoutMesh) {
+        this.blocksCutoutMesh.visible = true;
+        this.blocksCutoutMesh.rotation.x = -Math.PI / 2;
+        this.blocksCutoutMesh.material.opacity = 1;
+      }
+      this.setCameraView('Side', 0);
+    }
+    if (i >= 3) { // step 3 start: white 3D model (morph 0.66), cutouts hidden
+      t.group.visible = true;
+      t.setMorphFactor(0.66);
+      this.physics.setMorphFactor(0.66);
+      this.physics.blockMeshes.forEach(m => m.visible = true);
+      if (this.cutoutMesh) this.cutoutMesh.visible = false;
+      if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
+    }
+    if (i >= 4) { // step 4 start: full material, ball in cup, Hero view
+      t.setMorphFactor(1.0);
+      this.physics.setMorphFactor(1.0);
+      this.setCameraView('Hero', 0);
+      this.physics.ballReleased = false;
+      this.setPullAngle(0);
+      if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
+      this.updateBallInCup();
+    }
+    if (i >= 5) { // step 5 start: full material + all part labels
+      this.annotations.setPartLabels(this.getTourPartLabels(), this.getTourPartLabels().length, this.getLabelCenter());
+    }
+    if (i >= 6) { // step 6 start: labels off, blocks standing, ball in cup
+      this.annotations.setPartLabels(null, 0);
+      this.physics.resetBlocks();
+      this.physics.ballReleased = false;
+      this.setPullAngle(0);
+      this.updateBallInCup();
+    }
+    if (i >= 7) { // step 7 start: slow-mo replay, blocks reset, ball in cup
+      this.setSlowMo(true);
+      this.physics.resetBlocks();
+      this.physics.ballReleased = false;
+      this.setPullAngle(0);
+      this.updateBallInCup();
+    }
+  }
+
+  getTourPartLabels() {
+    // Anchors come from the REAL rendered meshes (getWorldPosition) so the
+    // label dots sit exactly on the parts as the wood3D model is framed,
+    // instead of guessed local offsets that drift off-target.  The seven
+    // parts follow the user-defined order: 配重箱 / 摆杆 / 底座 / 支架 /
+    // 碗 / 轮 / 箱子(右侧立方体塔).
+    const t = this.trebuchet;
+    const wp = (m, fallback) => {
+      const v = new THREE.Vector3();
+      if (m && m.getWorldPosition) m.getWorldPosition(v);
+      else v.set(t.group.position.x + (fallback ? fallback[0] : 0), fallback ? fallback[1] : 0.3, fallback ? fallback[2] : 0);
+      return v;
+    };
+    // 摆杆中点 = 碗端与枢轴中点（臂梁中心）
+    // 轮身锚点：轮心（轴承处）上偏到褐色轮圈顶部，让引线指向轮子本体
+    const wheelAnchor = (m) => {
+      const v = wp(m);
+      v.y += 0.055;
+      return v;
+    };
+    const cupV = wp(t.cupMesh);
+    const pivotV = wp(t.pivotMesh);
+    const armV = cupV.clone().add(pivotV).multiplyScalar(0.5);
+    // 箱子 = 右侧立方体塔中心（blockMeshes 平均世界位置）
+    let blocksV = new THREE.Vector3(t.group.position.x + 1.6, 0.18, 0);
+    const bm = this.physics && this.physics.blockMeshes;
+    if (bm && bm.length) {
+      const acc = new THREE.Vector3();
+      const tmp = new THREE.Vector3();
+      let k = 0;
+      bm.forEach((m) => { if (m && m.getWorldPosition) { m.getWorldPosition(tmp); acc.add(tmp); k++; } });
+      if (k) blocksV = acc.divideScalar(k);
+    }
+    return [
+      { name: 'Counterweight 配重箱', pos: wp(t.counterweightMesh) },
+      { name: 'Arm 摆杆', pos: armV },
+      { name: 'Chassis 底座', pos: wp(t.chassisMesh) },
+      { name: 'A-frame 支架', pos: wp(t.aframeMesh) },
+      { name: 'Ball 球', pos: wp(t.cupMesh) },
+      { name: 'Wheels 轮', pos: wheelAnchor(t.wheelMesh) },
+      { name: 'Blocks 箱子', pos: blocksV },
+    ];
+  }
+
+  getLabelCenter() {
+    // World-space centre the part labels radiate around (trebuchet body core)
+    const g = this.trebuchet.group.position;
+    return new THREE.Vector3(g.x, g.y + 0.34, 0);
+  }
+
+  async playTourFrom(startStep, singleStep = null) {
+    const signal = this.tourAbortController.signal;
 
     const sleep = (ms) => new Promise((resolve, reject) => {
       if (signal.aborted) return reject(new Error('Tour aborted'));
@@ -746,232 +996,251 @@ class App {
 
     try {
       // -----------------------------------------------------------------
-      // Step 1: 显示草图 (Display sketch on engineer paper)
+      // Step 1: 图纸 Blueprint
       // -----------------------------------------------------------------
-      this.environment.showPaperSketch();
-      this.trebuchet.setMorphFactor(0);
-      this.trebuchet.group.visible = false;
-      if (this.cutoutMesh) this.cutoutMesh.visible = false;
-      if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
-      this.physics.blockMeshes.forEach(m => m.visible = false);
-      if (this.physics.ballMesh) this.physics.ballMesh.visible = false;
+      if (startStep <= 0 && (singleStep === null || singleStep === 0)) {
+        this.environment.showPaperSketch();
+        this.trebuchet.group.visible = false;
+        this.trebuchet.setMorphFactor(0);
+        if (this.cutoutMesh) this.cutoutMesh.visible = false;
+        if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
+        this.physics.blockMeshes.forEach(m => m.visible = false);
+        if (this.physics.ballMesh) this.physics.ballMesh.visible = false;
 
-      this.setCameraView('Top', 800);
-      this.showTourBanner('1/8 Hand-drawn catapult sketch on engineering paper');
-      this.updateScrubber(0.02, '00:02');
-
-      await sleep(1200);
-
-      // -----------------------------------------------------------------
-      // Step 2: 草图变2D纸片，垂直立起（投石机与方块纸片同步立起）
-      // 注意：2-8图纸上的投石机与方块铅笔画草图隐藏
-      // -----------------------------------------------------------------
-      this.showTourBanner('2/8 Sketch lifts off paper as 2D cutouts and stands upright');
-      this.updateScrubber(0.14, '00:12');
-
-      // Hide the pencil sketches drawn on desk paper (kept hidden through steps 2-8)
-      this.environment.hidePaperSketch();
-
-      // Show the 2D cutout planes lying flat on paper
-      if (this.cutoutMesh) {
-        this.cutoutMesh.visible = true;
-        this.cutoutMesh.rotation.x = -Math.PI / 2;
-        this.cutoutMesh.material.opacity = 1.0;
-      }
-      if (this.blocksCutoutMesh) {
-        this.blocksCutoutMesh.visible = true;
-        this.blocksCutoutMesh.rotation.x = -Math.PI / 2;
-        this.blocksCutoutMesh.material.opacity = 1.0;
+        this.setCameraView('Top', 800);
+        this.showTourBanner('1/8 Blueprint — hand-drawn trebuchet sketch on engineering paper');
+        this.updateScrubber(0.06, '00:05');
+        this.highlightTourStep(0);
+        await sleep(1400);
       }
 
-      // Smoothly swing camera to Side view (matching Image 1) while 2D paper cutouts stand up
-      this.setCameraView('Side', 1800);
-      sound.playPaperSlide();
+      // -----------------------------------------------------------------
+      // Step 2: 图纸轮廓高亮 -> 2D纸片立起（平面 -> 立起）
+      // -----------------------------------------------------------------
+      if (startStep <= 1 && (singleStep === null || singleStep === 1)) {
+        this.environment.hidePaperSketch();
+        this.showTourBanner('2/8 Blueprint outline highlights, then lifts off as 2D cutouts');
+        this.updateScrubber(0.19, '00:16');
+        this.highlightTourStep(1);
 
-      // Animate rotation.x from -PI/2 (flat on paper) to 0 (standing vertical)
-      await tweenPromise(
-        { rotX: -Math.PI / 2 },
-        { rotX: 0 },
-        1800,
-        TWEEN.Easing.Cubic.InOut,
-        (o) => {
-          if (this.cutoutMesh) this.cutoutMesh.rotation.x = o.rotX;
-          if (this.blocksCutoutMesh) this.blocksCutoutMesh.rotation.x = o.rotX;
+        // Outline highlight: cutouts fade in flat on the paper (contours emerge)
+        if (this.cutoutMesh) {
+          this.cutoutMesh.visible = true;
+          this.cutoutMesh.rotation.x = -Math.PI / 2;
+          this.cutoutMesh.material.opacity = 0;
         }
-      );
+        if (this.blocksCutoutMesh) {
+          this.blocksCutoutMesh.visible = true;
+          this.blocksCutoutMesh.rotation.x = -Math.PI / 2;
+          this.blocksCutoutMesh.material.opacity = 0;
+        }
+        this.setCameraView('Side', 1600);
+        sound.playPaperSlide();
+        await Promise.all([
+          tweenPromise({ op: 0 }, { op: 1 }, 900, TWEEN.Easing.Quadratic.Out, (o) => {
+            if (this.cutoutMesh) this.cutoutMesh.material.opacity = o.op;
+            if (this.blocksCutoutMesh) this.blocksCutoutMesh.material.opacity = o.op;
+          }),
+          sleep(600)
+        ]);
 
-      await sleep(350);
+        // Stand up: rotate from flat (-PI/2) to vertical (0)
+        await tweenPromise(
+          { rotX: -Math.PI / 2 },
+          { rotX: 0 },
+          1600,
+          TWEEN.Easing.Cubic.InOut,
+          (o) => {
+            if (this.cutoutMesh) this.cutoutMesh.rotation.x = o.rotX;
+            if (this.blocksCutoutMesh) this.blocksCutoutMesh.rotation.x = o.rotX;
+          }
+        );
+        await sleep(350);
+      }
 
       // -----------------------------------------------------------------
-      // Step 3: 2D纸片变为纸3D模型 (2D cutouts unfold into 3D folded paper model)
+      // Step 3: 2D纸片 -> 3D白模型（morph 0 -> 0.66）
       // -----------------------------------------------------------------
-      this.showTourBanner('3/8 Paper cutouts unfold thickness into folded 3D paper models');
-      this.updateScrubber(0.28, '00:24');
+      if (startStep <= 2 && (singleStep === null || singleStep === 2)) {
+        this.showTourBanner('3/8 2D cutouts unfold into a 3D white model');
+        this.updateScrubber(0.38, '00:32');
+        this.highlightTourStep(2);
+        this.trebuchet.group.visible = true;
+        this.trebuchet.setMorphFactor(0.01);
+        this.physics.setMorphFactor(0.33);
+        this.physics.blockMeshes.forEach(m => m.visible = true);
 
-      // Make 3D paper model visible
-      this.trebuchet.group.visible = true;
-      this.trebuchet.setMorphFactor(0.01);
-      this.physics.setMorphFactor(0.33);
-      this.physics.blockMeshes.forEach(m => m.visible = true);
+        await Promise.all([
+          tweenPromise(
+            { f: 0.01 },
+            { f: 0.66 },
+            1800,
+            TWEEN.Easing.Cubic.InOut,
+            (o) => {
+              this.trebuchet.setMorphFactor(o.f);
+              this.physics.setMorphFactor(o.f);
+              this.morphSlider.value = Math.round(o.f * 100);
+            }
+          ),
+          (this.cutoutMesh || this.blocksCutoutMesh) ? tweenPromise(
+            { op: 1 },
+            { op: 0 },
+            1100,
+            TWEEN.Easing.Cubic.In,
+            (o) => {
+              if (this.cutoutMesh) this.cutoutMesh.material.opacity = o.op;
+              if (this.blocksCutoutMesh) this.blocksCutoutMesh.material.opacity = o.op;
+            }
+          ) : Promise.resolve()
+        ]);
+        if (this.cutoutMesh) this.cutoutMesh.visible = false;
+        if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
+        await sleep(400);
+      }
 
-      // Concurrently unfold 3D model thickness and fade out 2D cutouts
-      await Promise.all([
-        tweenPromise(
-          { f: 0.01 },
-          { f: 0.33 },
-          1500,
+      // -----------------------------------------------------------------
+      // Step 4: 白模型 -> 正式的材质3D模型
+      // -----------------------------------------------------------------
+      if (startStep <= 3 && (singleStep === null || singleStep === 3)) {
+        this.showTourBanner('4/8 White model takes on balsa wood, metal pins & lead counterweight');
+        this.updateScrubber(0.53, '00:45');
+        this.highlightTourStep(3);
+        this.setCameraView('Hero', 1800);
+        await tweenPromise(
+          { f: 0.66 },
+          { f: 1.0 },
+          1600,
           TWEEN.Easing.Cubic.InOut,
           (o) => {
             this.trebuchet.setMorphFactor(o.f);
+            this.physics.setMorphFactor(o.f);
             this.morphSlider.value = Math.round(o.f * 100);
           }
-        ),
-        (this.cutoutMesh || this.blocksCutoutMesh) ? tweenPromise(
-          { op: 1.0 },
-          { op: 0.0 },
-          1000,
-          TWEEN.Easing.Cubic.In,
+        );
+        if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
+        this.physics.ballReleased = false;
+        this.setPullAngle(0);
+        this.updateBallInCup();
+        await sleep(600);
+      }
+
+      // -----------------------------------------------------------------
+      // Step 5: 渐进式显示每个主要部件名称（点线+文字）
+      // -----------------------------------------------------------------
+      if (startStep <= 4 && (singleStep === null || singleStep === 4)) {
+        this.showTourBanner('5/8 Parts — labels point to each major component');
+        this.updateScrubber(0.68, '00:57');
+        this.highlightTourStep(4);
+        const labels = this.getTourPartLabels();
+        for (let i = 1; i <= labels.length; i++) {
+          this.annotations.setPartLabels(labels, i, this.getLabelCenter());
+          await sleep(420);
+        }
+        await sleep(900);
+      }
+
+      // -----------------------------------------------------------------
+      // Step 6: 先示意，然后执行拖拽摆杆完成发射
+      // -----------------------------------------------------------------
+      if (startStep <= 5 && (singleStep === null || singleStep === 5)) {
+        this.showTourBanner('6/8 Hold the cup, pull down, let go — fire!');
+        this.updateScrubber(0.84, '01:11');
+        this.highlightTourStep(5);
+        this.annotations.setPartLabels(null, 0);
+
+        // 示意：animated drag hint over the cup
+        this.annotations.showDragHint(this.trebuchet.getCupWorldPosition());
+        await sleep(2000);
+        this.annotations.hideDragHint();
+
+        // 执行拖拽（模拟按住碗下拉再松手）
+        let lastPullSoundAngle = 0;
+        await tweenPromise(
+          { pull: 0 },
+          { pull: 84.5 },
+          900,
+          TWEEN.Easing.Cubic.Out,
           (o) => {
-            if (this.cutoutMesh) this.cutoutMesh.material.opacity = o.op;
-            if (this.blocksCutoutMesh) this.blocksCutoutMesh.material.opacity = o.op;
+            this.setPullAngle(o.pull);
+            if (Math.abs(o.pull - lastPullSoundAngle) >= 5) {
+              sound.playTilt(0.4);
+              lastPullSoundAngle = o.pull;
+            }
           }
-        ) : Promise.resolve()
-      ]);
-
-      if (this.cutoutMesh) this.cutoutMesh.visible = false;
-      if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
-      await sleep(400);
-
-      // -----------------------------------------------------------------
-      // Step 4: 纸3D模型变为灰度白模型（没有其他颜色）
-      // -----------------------------------------------------------------
-      this.showTourBanner('4/8 Transforming into a pure clay monochrome white model');
-      this.updateScrubber(0.44, '00:38');
-
-      await tweenPromise(
-        { f: 0.33 },
-        { f: 0.66 },
-        1600,
-        TWEEN.Easing.Cubic.InOut,
-        (o) => {
-          this.trebuchet.setMorphFactor(o.f);
-          this.physics.setMorphFactor(o.f);
-          this.morphSlider.value = Math.round(o.f * 100);
-        }
-      );
-
-      await sleep(400);
+        );
+        await sleep(250);
+        this.fire();
+        await sleep(2400);
+      }
 
       // -----------------------------------------------------------------
-      // Step 5: 灰度白模型转为目前有材质颜色的3D模型
+      // Step 7: 慢镜回放刚才的发射
       // -----------------------------------------------------------------
-      this.showTourBanner('5/8 Applying balsa wood grain, metal pins, and cast-lead counterweight');
-      this.updateScrubber(0.60, '00:52');
-      this.setCameraView('Hero', 1800);
+      if (startStep <= 6 && (singleStep === null || singleStep === 6)) {
+        this.showTourBanner('7/8 Slow-motion replay at quarter speed (0.25×)');
+        this.updateScrubber(0.94, '01:19');
+        this.highlightTourStep(6);
+        this.physics.resetBlocks();
+        this.physics.wakeBlocks();
+        this.physics.ballReleased = false;
+        this.updateBallInCup();
+        this.setSlowMo(true);
 
-      await tweenPromise(
-        { f: 0.66 },
-        { f: 1.0 },
-        1600,
-        TWEEN.Easing.Cubic.InOut,
-        (o) => {
-          this.trebuchet.setMorphFactor(o.f);
-          this.physics.setMorphFactor(o.f);
-          this.morphSlider.value = Math.round(o.f * 100);
-        }
-      );
-
-      // Reveal ball in cup
-      if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
-      this.setPullAngle(0);
-      this.updateBallInCup();
-
-      await sleep(600);
-
-      // -----------------------------------------------------------------
-      // Step 6: 发射1次 (Fire projectile once)
-      // -----------------------------------------------------------------
-      this.showTourBanner('6/8 Pulling arm and launching projectile: direct hit on target pyramid!');
-      this.updateScrubber(0.72, '01:02');
-
-      // Cock arm smoothly to 45 deg with continuous tilt clicks
-      let lastPullSoundAngle = 0;
-      await tweenPromise(
-        { pull: 0 },
-        { pull: 45 },
-        900,
-        TWEEN.Easing.Cubic.Out,
-        (o) => {
-          this.setPullAngle(o.pull);
-          if (Math.abs(o.pull - lastPullSoundAngle) >= 5) {
-            sound.playTilt(0.4);
-            lastPullSoundAngle = o.pull;
+        let lastReplayPullSound = 0;
+        await tweenPromise(
+          { pull: 0 },
+          { pull: 84.5 },
+          700,
+          TWEEN.Easing.Cubic.Out,
+          (o) => {
+            this.setPullAngle(o.pull);
+            if (Math.abs(o.pull - lastReplayPullSound) >= 5) {
+              sound.playTilt(0.4);
+              lastReplayPullSound = o.pull;
+            }
           }
-        }
-      );
-
-      await sleep(250);
-
-      // Launch ball!
-      this.fire();
-
-      // Wait for ball to land and blocks to topple
-      await sleep(2400);
-
-      // -----------------------------------------------------------------
-      // Step 7: slow motion重播刚才的发射
-      // -----------------------------------------------------------------
-      this.showTourBanner('7/8 Slow-motion replay at quarter speed (0.25×)');
-      this.updateScrubber(0.86, '01:14');
-
-      // Reset physics blocks & ball for replay
-      this.physics.resetBlocks();
-      this.physics.wakeBlocks();
-      this.physics.ballReleased = false;
-      this.updateBallInCup();
-
-      // Enable slow motion
-      this.setSlowMo(true);
-
-      // Cock arm to 45 deg again with continuous tilt clicks
-      let lastReplayPullSound = 0;
-      await tweenPromise(
-        { pull: 0 },
-        { pull: 45 },
-        700,
-        TWEEN.Easing.Cubic.Out,
-        (o) => {
-          this.setPullAngle(o.pull);
-          if (Math.abs(o.pull - lastReplayPullSound) >= 5) {
-            sound.playTilt(0.4);
-            lastReplayPullSound = o.pull;
-          }
-        }
-      );
-
-      await sleep(200);
-
-      // Launch slow motion
-      this.fire();
-
-      // Wait for slow motion shot to finish (runs at 0.25x so ~4.5s)
-      await sleep(4500);
+        );
+        await sleep(200);
+        this.fire();
+        // Full slow-mo replay: keep playing until the iron ball leaves the
+        // scene (flies out of view) or comes to rest after impact — never
+        // pause right after it lands.  Bounded by a generous timeout.
+        const ballMesh = this.physics.ballMesh;
+        const ballBody = this.physics.ballBody;
+        const replayStart = performance.now();
+        await new Promise((resolve) => {
+          const check = () => {
+            const v = new THREE.Vector3();
+            if (ballMesh && ballMesh.getWorldPosition) ballMesh.getWorldPosition(v);
+            const out = Math.abs(v.x) > 2.5 || v.y < -0.3 || Math.abs(v.z) > 2.0;
+            const settled = ballBody && this.physics.ballReleased && ballBody.velocity.length() < 0.06;
+            if (out || settled || performance.now() - replayStart > 24000) resolve();
+            else requestAnimationFrame(check);
+          };
+          check();
+        });
+      }
 
       // -----------------------------------------------------------------
-      // Step 8: 切到自定义界面状态
-      // 注意：2-8图纸上的投石机铅笔画草图隐藏
+      // Step 8: 切到 build it yourself
       // -----------------------------------------------------------------
-      this.showTourBanner('8/8 Tour complete! Customize weight, pull angle, and launch it yourself.');
-      this.updateScrubber(1.0, '01:24');
-      this.setSlowMo(false);
-      this.setPlayButtonState(false);
-
-      await sleep(1600);
-
-      this.hideTourBanner();
-      this.showBuildPanel(); // Switches interface to custom "Build it yourself" mode
-      this.updateNavButtons('build');
-
+      if (startStep <= 7 && (singleStep === null || singleStep === 7)) {
+        this.showTourBanner('8/8 Tour complete — now build it yourself');
+        this.updateScrubber(1.0, '01:24');
+        this.highlightTourStep(7);
+        // End state: no auto fire, no leftover replay — just reset to the
+        // manipulable idle state and switch to build-it-yourself mode.
+        this.setSlowMo(false);
+        this.physics.resetBlocks();
+        this.physics.ballReleased = false;
+        this.setPullAngle(0);
+        this.updateBallInCup();
+        this.setPlayButtonState(false);
+        await sleep(400);
+        this.hideTourBanner();
+        this.showBuildPanel();
+        this.updateNavButtons('build');
+      }
     } catch (err) {
       if (err.message === 'Tour aborted') {
         console.log('Tour stopped or reset by user.');
@@ -995,6 +1264,14 @@ class App {
     this.scrubberProgress.style.width = `${pct}%`;
     this.scrubberThumb.style.left = `${pct}%`;
     this.scrubberCurrentTime.textContent = timeStr;
+    this.highlightTourStep(Math.min(7, Math.max(0, Math.floor(progress * 8))));
+  }
+
+  highlightTourStep(i) {
+    if (!this.tourSteps) this.tourSteps = document.querySelectorAll('.tour-step');
+    this.tourSteps.forEach((btn, idx) => {
+      btn.classList.toggle('active', idx === i);
+    });
   }
 
   setSlowMo(enabled) {
@@ -1048,7 +1325,7 @@ class App {
     if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
 
     this.buildPanel.classList.remove('hidden');
-    this.dragHint.classList.remove('hidden');
+    this.showDragHintFor(2000);
     this.playerScrubber.classList.add('hidden');
     this.annotations.showTrajectories = false;
     this.updateNavButtons('build');
@@ -1070,6 +1347,19 @@ class App {
       ? 'Top view: use the controls to launch'
       : 'Hold the cup, pull down, and let go';
     this.dragHint.innerHTML = `<span class="dot">●</span> ${message}`;
+  }
+
+  // Show the build-mode top hint for `ms`, then auto-hide. Re-showing resets
+  // the timer (used on entering build mode and after Reset).
+  showDragHintFor(ms = 2000) {
+    if (!this.dragHint || this.isTourRunning) return;
+    this.updateDragHint();
+    this.dragHint.classList.remove('hidden');
+    if (this._dragHintTimer) clearTimeout(this._dragHintTimer);
+    this._dragHintTimer = setTimeout(() => {
+      this.dragHint.classList.add('hidden');
+      this._dragHintTimer = null;
+    }, ms);
   }
 
   // Interactive mouse dragging & controls
@@ -1109,6 +1399,7 @@ class App {
     // Reset button
     this.btnReset.addEventListener('click', () => {
       this.resetAll();
+      this.showDragHintFor(2000);
     });
 
     // Slow motion toggle
@@ -1124,6 +1415,10 @@ class App {
     });
 
     // Weight slider (changes counterweight mass)
+    this.ballSlider.addEventListener('input', (e) => {
+      this.setBallMass(parseFloat(e.target.value));
+    });
+
     this.weightSlider.addEventListener('input', (e) => {
       this.setWeight(parseFloat(e.target.value));
       this.annotations.showWeightCallout = true;
@@ -1195,18 +1490,50 @@ class App {
       });
     }
 
-    if (this.scrubberContainer) {
-      this.scrubberContainer.addEventListener('click', (e) => {
-        const rect = this.scrubberContainer.getBoundingClientRect();
-        const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        if (clickRatio > 0.85) {
-          this.showBuildPanel();
-        } else if (clickRatio < 0.15) {
-          this.resetToFirstFrame();
-        } else {
-          this.playTour();
-        }
+    document.querySelectorAll('.tour-step').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        sound.init();
+        const step = parseInt(btn.dataset.step, 10);
+        this.seekTourStep(step);
       });
+    });
+
+    if (this.scrubberContainer) {
+      // Drag / click the scrubber to seek to any of the 8 tour steps.
+      // The track is divided into 8 equal segments; releasing seeks to that
+      // step, which lands on its start state and replays from there.
+      let seekDragging = false;
+      const seekProgress = (clientX) => {
+        const rect = this.scrubberContainer.getBoundingClientRect();
+        return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      };
+      const seekTime = (p) => {
+        const t = Math.round(p * 84);
+        const m = Math.floor(t / 60), s = t % 60;
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      };
+      this.scrubberContainer.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        seekDragging = true;
+        try { this.scrubberContainer.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+        const p = seekProgress(e.clientX);
+        this.updateScrubber(p, seekTime(p));
+      });
+      this.scrubberContainer.addEventListener('pointermove', (e) => {
+        if (!seekDragging) return;
+        const p = seekProgress(e.clientX);
+        this.updateScrubber(p, seekTime(p));
+      });
+      const seekCommit = (e) => {
+        if (!seekDragging) return;
+        seekDragging = false;
+        const p = seekProgress(e.clientX);
+        const step = Math.min(7, Math.max(0, Math.floor(p * 8)));
+        sound.init();
+        this.seekTourStep(step);
+      };
+      this.scrubberContainer.addEventListener('pointerup', seekCommit);
+      this.scrubberContainer.addEventListener('pointercancel', () => { seekDragging = false; });
     }
 
     // Mouse / Touch Dragging of the spoon downwards:
@@ -1236,6 +1563,7 @@ class App {
       // A press is only a grab.  The arm launches exclusively after a real,
       // downward pull and release, so accidental clicks cannot fire the ball.
       if (launch && this.dragMoved && this.pullDeg > 8) this.fire(true);
+      this.controls.enabled = true;
     };
 
     const onPointerDown = (e) => {
@@ -1259,6 +1587,7 @@ class App {
       const intersects = this.raycaster.intersectObjects(objectsToTest, true);
 
       if (intersects.length > 0) {
+        this.controls.enabled = false; // spoon drag takes the pointer
         // Preserve the grab height at the exact point touched.  The drag
         // plane is parallel to the arm's XY rotation plane and goes through
         // that point, so perspective does not make the cup lag behind.
@@ -1342,8 +1671,41 @@ class App {
 
     TWEEN.update();
 
+    // OrbitControls damping needs a per-frame update. During the tour and
+    // camera transitions the view is scripted, so the orbit stays disabled.
+    if (this.isTourRunning || this.isCameraTransitioning || this.isDraggingCup) {
+      this.controls.enabled = false;
+    } else {
+      this.controls.enabled = true;
+    }
+    this.controls.update();
+
     // Step physics
     this.physics.step(delta);
+    this.physics.updateBlockHitVisuals();
+    // Keep DOWN live after a completed shot: cascading topples can continue for
+    // seconds, and the counter must match the knocked-down block visuals exactly.
+    if (this.showFlightAnnotations) {
+      this.updateDownCount();
+    }
+
+    // Recoil dynamics: the chassis kicks back on release, then returns on a
+    // lightly-damped spring (ground friction kills the kick, the rest position
+    // re-asserts).  Visual only — the physics anchor stays fixed so the
+    // trajectory baseline is untouched.
+    const trebGroup = this.trebuchet.group;
+    if (Math.abs(this.recoilVel) > 1e-4 || Math.abs(trebGroup.position.x - this.recoilBaseX) > 1e-4) {
+      trebGroup.position.x += this.recoilVel * delta;
+      this.recoilVel += ((this.recoilBaseX - trebGroup.position.x) * 90 - this.recoilVel * 12) * delta;
+      if (Math.abs(this.recoilVel) < 1e-4 && Math.abs(trebGroup.position.x - this.recoilBaseX) < 1e-4) {
+        trebGroup.position.x = this.recoilBaseX;
+        this.recoilVel = 0;
+      }
+    }
+
+    // Real hinge mechanism: sync the 3D arm from the physics bodies, detect
+    // release at the stop angle, or finish the shot when the ball lands.
+    this.updateMechanism();
 
     // Keep ball in cup if resting
     if (!this.physics.ballReleased) {

@@ -42,6 +42,264 @@ export class TrajectoryAnnotations {
     this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
   }
 
+  // ---- Tour part labels (step 5): name + world position, progressive ----
+  setPartLabels(labels, count, center = null) {
+    this.partLabels = labels || null;
+    this.partLabelCount = count || 0;
+    this.labelCenter = center; // world-space centre labels radiate around
+  }
+
+  drawPartLabels() {
+    if (!this.partLabels || this.partLabelCount <= 0) return;
+    const labels = this.partLabels.slice(0, Math.min(this.partLabelCount, this.partLabels.length));
+    const visible = labels
+      .map((label) => ({ label, p: this.toScreen(label.pos) }))
+      .filter((x) => x.p.visible);
+    const n = visible.length;
+    if (!n) return;
+
+    // Close-up label style (like the counterweight mass tag): each label sits
+    // just OUTSIDE its part, pushed along the anchor's outward direction with
+    // a short dashed-blue parabola leader.  Labels fan out in different
+    // directions so nothing clusters on a single point; text boxes are
+    // collision-checked (push further out) and leader curves are
+    // cross-checked (push out again), guaranteeing no overlapping text or
+    // crossing lines.  No cards — pure handwritten labels.
+    const c = this.labelCenter ? this.toScreen(this.labelCenter) : null;
+    const w = this.width, h = this.height;
+    const cx = c && c.visible ? Math.min(w * 0.72, Math.max(w * 0.28, c.x)) : w / 2;
+    const cy = c && c.visible ? Math.min(h * 0.60, Math.max(h * 0.36, c.y)) : h * 0.55;
+
+    // Layout is computed once for the FULL label set: progressive reveal then
+    // shows each label at its final slot, so nothing ever jumps.
+    const full = this.partLabels
+      .map((label) => ({ label, p: this.toScreen(label.pos) }))
+      .filter((x) => x.p.visible);
+    const m = full.length;
+
+    this.ctx.save();
+    this.ctx.font = '600 17px "Caveat", cursive';
+    this.ctx.textBaseline = 'middle';
+
+    const geomFor = (v, dist, angOffset = 0) => {
+      // Push outward from the part along its anchor direction, optionally
+      // rotated by angOffset so colliding labels fan out sideways instead of
+      // stacking in a vertical chain.
+      const base = Math.atan2(v.p.y - cy, v.p.x - cx);
+      const a = base + angOffset;
+      const ux = Math.cos(a), uy = Math.sin(a);
+      let tx = v.p.x + ux * dist;
+      let ty = v.p.y + uy * dist;
+      tx = Math.min(w - 70, Math.max(70, tx));
+      ty = Math.min(h - 92, Math.max(64, ty));
+      return { tx, ty, ux, uy, a };
+    };
+    // Ball & Arm special placement: label sits horizontally to the RIGHT of
+    // its anchor at the same height (no vertical chain), with the leader's
+    // perpendicular offset rotated clockwise 90°.
+    const horizontalRight = (v, dist) => {
+      let tx = v.p.x + dist;
+      let ty = v.p.y;
+      tx = Math.min(w - 70, Math.max(70, tx));
+      ty = Math.min(h - 92, Math.max(64, ty));
+      return { tx, ty, ux: 1, uy: 0, a: 0 };
+    };
+    const textBox = (g, tw) => {
+      const ca = g.ux;
+      let align = Math.abs(ca) > 0.3 ? (ca > 0 ? 'left' : 'right') : 'center';
+      let x0, x1;
+      if (align === 'left') { x0 = g.tx + 14; x1 = x0 + tw; }
+      else if (align === 'right') { x0 = g.tx - 14 - tw; x1 = g.tx - 14; }
+      else { x0 = g.tx - tw / 2; x1 = g.tx + tw / 2; }
+      return { align, x0, x1, y0: g.ty - 12, y1: g.ty + 12 };
+    };
+    const boxes = [];
+    // Overlap = true boxes intersect, OR they line up in the same column
+    // (vertical chain: wide x-overlap with a small y gap) — the latter is
+    // treated as a collision so labels fan out sideways instead of stacking.
+    const verticalChain = (b, o) => {
+      const minW = Math.min(b.x1 - b.x0, o.x1 - o.x0);
+      if (minW <= 0) return false;
+      const ow = Math.min(b.x1, o.x1) - Math.max(b.x0, o.x0);
+      if (ow / minW <= 0.5) return false;
+      const yGap = Math.min(Math.abs(b.y0 - o.y1), Math.abs(b.y1 - o.y0));
+      return yGap < 130;
+    };
+    const overlap = (b) => boxes.some((o) =>
+      !(b.x1 <= o.x0 || b.x0 >= o.x1 || b.y1 <= o.y0 || b.y0 >= o.y1) || verticalChain(b, o));
+    const widths = full.map((v) => this.ctx.measureText(v.label.name).width);
+
+    // Direction-cluster detection: when several anchors point the same way
+    // (e.g. cup + arm both sit upper-left), later labels get a fixed base tilt
+    // so they fan out sideways instead of forming a vertical chain.
+    const anchorDirs = full.map((v) => Math.atan2(v.p.y - cy, v.p.x - cx));
+    const claimedDirs = [];
+    const slots = [];
+    for (let i = 0; i < m; i++) {
+      const isBall = full[i].label.name === 'Ball 球';
+      const isArm = full[i].label.name === 'Arm 摆杆';
+      const isChassis = full[i].label.name === 'Chassis 底座';
+      // Chassis leader runs down across the wheel: nudge its label to the
+      // right (clockwise tilt) so the curve clears the wheel.
+      const chassisTilt = isChassis ? Math.PI / 5 : 0;
+      const near = claimedDirs.filter((d) => {
+        let dd = Math.abs(d - anchorDirs[i]);
+        dd = Math.min(dd, Math.PI * 2 - dd);
+        return dd < Math.PI / 6; // 30° = same direction cluster
+      });
+      const baseOff = near.length === 0 ? 0 : (near.length % 2 === 1 ? near.length * 38 : -near.length * 38);
+      claimedDirs.push(anchorDirs[i]);
+      let dist = isBall ? 66 : isArm ? 118 : 108, g = null, box = null;
+      for (let k = 0; k < 12; k++) {
+        // Alternate clockwise/anti-clockwise tilts so a blocked label slides
+        // sideways rather than piling directly below the previous one.
+        const angOff = k === 0 ? baseOff + chassisTilt : (k % 2 === 1 ? k * 16 : -(k * 16));
+        g = isBall || isArm ? horizontalRight(full[i], dist) : geomFor(full[i], dist, angOff);
+        box = textBox(g, widths[i]);
+        if (!overlap(box)) break;
+        dist += 26;
+      }
+      boxes.push(box);
+      slots.push({ g, box, dist });
+    }
+
+    // Leader cross-check: sample the parabolas and push the later label out
+    // until no two curves intersect (bounded retries).
+    const curvePts = (v, g) => {
+      const ctrlX = (v.p.x + g.tx) / 2 + Math.sin(g.a) * 26;
+      const ctrlY = (v.p.y + g.ty) / 2 - Math.cos(g.a) * 26;
+      const pts = [];
+      for (let t = 0; t <= 12; t++) {
+        const u = t / 12, m2 = 1 - u;
+        pts.push([m2 * m2 * v.p.x + 2 * u * m2 * ctrlX + u * u * g.tx,
+                 m2 * m2 * v.p.y + 2 * u * m2 * ctrlY + u * u * g.ty]);
+      }
+      return pts;
+    };
+    const segCross = (x1, y1, x2, y2, x3, y3, x4, y4) => {
+      const d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (d === 0) return false;
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+      const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / d;
+      return t > 0.02 && t < 0.98 && u > 0.02 && u < 0.98;
+    };
+    const rebuildPts = () => full.map((v, i) => curvePts(v, slots[i].g));
+    let P = rebuildPts();
+    for (let retry = 0; retry < 12; retry++) {
+      let hit = null;
+      for (let i = 0; i < P.length && !hit; i++)
+        for (let j = i + 1; j < P.length && !hit; j++)
+          for (let a2 = 0; a2 < 12 && !hit; a2++)
+            for (let b2 = 0; b2 < 12 && !hit; b2++)
+              if (segCross(P[i][a2][0], P[i][a2][1], P[i][a2 + 1][0], P[i][a2 + 1][1],
+                           P[j][b2][0], P[j][b2][1], P[j][b2 + 1][0], P[j][b2 + 1][1])) hit = [i, j];
+      if (!hit) break;
+      const v = full[hit[1]], old = slots[hit[1]];
+      let dist = old.dist + 30, g = null, box = null;
+      for (let k = 0; k < 12; k++) {
+        const angOff = k === 0 ? 0 : (k % 2 === 1 ? k * 16 : -(k * 16));
+        g = geomFor(v, dist, angOff);
+        box = textBox(g, widths[hit[1]]);
+        if (!overlap(box)) break;
+        dist += 26;
+      }
+      slots[hit[1]] = { g, box, dist };
+      boxes[hit[1]] = box;
+      P = rebuildPts();
+    }
+
+    for (let i = 0; i < n; i++) {
+      const { label, p } = visible[i];
+      const { g, box } = slots[i];
+      const tx = g.tx, ty = g.ty, a = g.a;
+
+      // Short dashed parabola from the part to its close-up label
+      this.ctx.strokeStyle = '#2563eb';
+      this.ctx.fillStyle = '#2563eb';
+      this.ctx.lineWidth = 2.2;
+      this.ctx.lineCap = 'round';
+      this.ctx.setLineDash([7, 6]);
+      // Perpendicular (vertical) control offset keeps the leader a real
+      // curve even for the horizontal Ball/Arm labels: it arches up instead
+      // of collapsing onto the baseline.
+      const ctrlX = (p.x + tx) / 2 + Math.sin(a) * 26;
+      const ctrlY = (p.y + ty) / 2 - Math.cos(a) * 26;
+      this.ctx.beginPath();
+      this.ctx.moveTo(p.x, p.y);
+      this.ctx.quadraticCurveTo(ctrlX, ctrlY, tx, ty);
+      this.ctx.stroke();
+      this.ctx.setLineDash([]);
+
+      // Small arrowhead at the TEXT end of the leader
+      const ux = g.ux, uy = g.uy;
+      const tipX = tx - ux * 9, tipY = ty - uy * 9;
+      const px = -uy * 5, py = ux * 5;
+      this.ctx.beginPath();
+      this.ctx.moveTo(tipX, tipY);
+      this.ctx.lineTo(tipX + px, tipY + py);
+      this.ctx.lineTo(tipX - px, tipY - py);
+      this.ctx.closePath();
+      this.ctx.fill();
+
+      // Pure blue handwritten text, aligned away from the part
+      this.ctx.textAlign = box.align;
+      this.ctx.fillText(label.name, box.align === 'left' ? tx + 14 : box.align === 'right' ? tx - 14 : tx, ty);
+    }
+    this.ctx.restore();
+  }
+
+  // ---- Tour step 6 drag hint: animated arrow + text over the cup ----
+  showDragHint(pos) {
+    this.dragHintPos = pos ? pos.clone() : null;
+  }
+
+  hideDragHint() {
+    this.dragHintPos = null;
+  }
+
+  drawDragHint() {
+    if (!this.dragHintPos) return;
+    const p = this.toScreen(this.dragHintPos);
+    const w = this.width, h = this.height;
+    const bob = Math.sin(performance.now() / 260) * 8;
+    this.ctx.save();
+    // Curved parabolic leader in the flight-path style (dashed blue), sweeping
+    // from the hint text down to the cup, ending in a downward arrow.  When the
+    // cup projects outside the view (rest position sits above the Hero frame),
+    // the arrow and text are clamped into the visible canvas so the gesture
+    // hint always stays on screen.
+    const ax = Math.min(w - 50, Math.max(50, p.x));
+    let ay = p.y - 46 + bob;
+    if (ay < 64) ay = 64 + bob;
+    const tx = Math.min(w - 110, Math.max(110, p.x));
+    const ty = 112; // fixed handwritten banner, clear of the tour banner
+    this.ctx.strokeStyle = '#2563eb';
+    this.ctx.fillStyle = '#2563eb';
+    this.ctx.lineWidth = 2.6;
+    this.ctx.lineCap = 'round';
+    this.ctx.setLineDash([7, 6]);
+    // Gentle curve: the perpendicular control offset scales with the leader
+    // length so it never twists or folds back on itself, whatever the
+    // relative position of text and cup.
+    const mx = (tx + ax) / 2, my = (ty + ay) / 2;
+    const dx = ax - tx, dy = ay - ty;
+    const len = Math.hypot(dx, dy) || 1;
+    const off = Math.min(38, len * 0.18);
+    const ctrlX = mx - (dy / len) * off;
+    const ctrlY = my + (dx / len) * off;
+    this.ctx.beginPath();
+    this.ctx.moveTo(tx, ty + 10);
+    this.ctx.quadraticCurveTo(ctrlX, ctrlY, ax, ay + 4);
+    this.ctx.stroke();
+    this.ctx.setLineDash([]);
+    // Handwritten hint text in the same blue
+    this.ctx.font = '700 21px "Caveat", cursive';
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'bottom';
+    this.ctx.fillText('Hold the cup, pull down, let go', tx, ty);
+    this.ctx.restore();
+  }
+
   clear() {
     this.points = [];
     this.launchPoint = null;
@@ -67,7 +325,7 @@ export class TrajectoryAnnotations {
     this.impactPoint = impactVec3 ? impactVec3.clone() : (this.points[this.points.length - 1] || null);
     this.stats.speed = `${speed.toFixed(2)} m/s`;
     this.stats.angle = `${Math.round(angleDeg)}°`;
-    this.stats.range = rangeDist.toFixed(2);
+    this.stats.range = `${rangeDist.toFixed(2)}m`; // e.g. 2.69m, matches panel mm value
     this.showFlightAnnotations = true;
   }
 
@@ -214,6 +472,12 @@ export class TrajectoryAnnotations {
 
     // (Static reference arcs removed per user request: only live recorded flight path is rendered)
 
+    // 1.5 Tour part labels (step 5)
+    this.drawPartLabels();
+
+    // 1.6 Tour drag hint (step 6)
+    this.drawDragHint();
+
     // 2. Draw Floating Weight Callout Badge next to black counterweight box
     this.drawWeightCallout();
 
@@ -275,16 +539,8 @@ export class TrajectoryAnnotations {
         this.ctx.textAlign = 'center';
         this.ctx.fillText(this.stats.speed, startP.x + 10, startP.y - 32);
 
-        // Angle
-        this.ctx.font = '600 20px "Caveat", cursive';
-        this.ctx.fillText(this.stats.angle, startP.x + 55, startP.y - 10);
-        this.ctx.strokeStyle = '#2d261e';
-        this.ctx.lineWidth = 1.5;
-        this.ctx.beginPath();
-        this.ctx.arc(startP.x, startP.y, 28, -Math.PI / 2, -Math.PI / 6, false);
-        this.ctx.stroke();
-
-        // Range
+        // Range (the fixed 31° launch angle is intentionally not annotated:
+        // it is geometry-determined and identical every shot)
         this.ctx.font = '700 23px "Caveat", cursive';
         this.ctx.fillText(this.stats.range, midP.x - 15, midP.y - 18);
 

@@ -1,0 +1,161 @@
+{
+  "spec_version": "0.1",
+  "name": "paper-trebuchet",
+  "source": {
+    "kind": "code-extraction",
+    "repo": "recohcity/paper-trebuchet",
+    "note": "Extracted from src/*.js; this is the retrofit audit spec, not a sketch-derived spec"
+  },
+  "scale": {
+    "unit_definition": "1 scene unit = 1 m",
+    "status": "CONFLICT",
+    "evidence": [
+      "physics.js: gravity 9.82, block 0.088 cube, mass 0.14 kg -> assumes 1 unit = 1 m",
+      "main.js: RANGE shown as round(units*1000) mm -> assumes 1 unit = 1 m",
+      "environment.js: 'A4 2.7 units = 297 mm' -> assumes 1 unit ~ 0.11 m",
+      "demo anchor: blocks are 40 mm -> 1 unit ~ 0.4545 m"
+    ]
+  },
+  "world": {
+    "gravity": 9.82,
+    "table_top_y": 0.006,
+    "group_origin": [
+      -0.72,
+      0.006
+    ]
+  },
+  "mechanism": {
+    "type": "hinged_lever_with_hanging_counterweight",
+    "pivot_local": [
+      0.02,
+      0.5964
+    ],
+    "arm": {
+      "x_min": -0.596,
+      "x_max": 0.315,
+      "thickness_y": 0.042,
+      "depth_z": 0.034,
+      "density": {
+        "value": 160,
+        "provenance": "assumed:balsa"
+      }
+    },
+    "cup": {
+      "center_local": [
+        -0.65,
+        0.021
+      ],
+      "inner_r": 0.05,
+      "outer_r": 0.07,
+      "mass": {
+        "value": null,
+        "provenance": "derived:hemispherical shell x arm density"
+      }
+    },
+    "projectile": {
+      "radius": 0.03,
+      "mass": {
+        "value": 0.45,
+        "provenance": "code:physics.js (0.45 kg solid steel; r = 0.05*cup_ri * ratio, ratio 0.60 @ 0.45 kg, 0.80 @ 0.60 kg — ball diameter maps to 60-80% of 100 mm cup bore)"
+      },
+      "rest_offset_from_cup_center": [
+        0,
+        -0.004
+      ]
+    },
+    "counterweight": {
+      "pin_local": [
+        0.3,
+        0.0
+      ],
+      "hang_length": 0.1,
+      "box_size": 0.13,
+      "mass_range": [
+        1.4,
+        3.0
+      ],
+      "default_mass": 2.6,
+      "container_mass": {
+        "value": 0.0,
+        "provenance": "assumed:ignored"
+      }
+    },
+    "rest_angle": -1.0,
+    "stop": {
+      "type": "hard_stop_at_rest_angle",
+      "restitution": 0.0,
+      "provenance": "assumed"
+    },
+    "release": {
+      "type": "ideal_at_stop",
+      "note": "ball leaves with pre-stop velocity; real spoon release is contact-dependent"
+    }
+  },
+  "inputs": [
+    {
+      "id": "pull_deg",
+      "range": [
+        0,
+        84.5
+      ],
+      "range_provenance": "derived:cradle-bottom touches paper (analytic 84.58)"
+    },
+    {
+      "id": "counterweight_kg",
+      "range": [
+        1.4,
+        3.0
+      ],
+      "range_provenance": "code:physics.js/trebuchet.js slider min 1.40 max 3.00 default 2.60 (hover recalibration; full sand = 3.0 kg)"
+    }
+  ],
+  "target": {
+    "type": "pyramid",
+    "rows": [
+      4,
+      3,
+      2,
+      1
+    ],
+    "block": {
+      "size": 0.11,
+      "mass": 0.3
+    },
+    "center_x": 0.84
+  },
+  "outputs": [
+    {
+      "id": "launch_speed",
+      "unit": "m/s"
+    },
+    {
+      "id": "launch_angle",
+      "unit": "deg"
+    },
+    {
+      "id": "range",
+      "unit": "mm"
+    },
+    {
+      "id": "downed",
+      "criterion": "upright.y<0.85 OR |dpos|>0.045 OR |dy|>0.030"
+    }
+  ],
+  "fitted_quantities_in_current_project": [
+    {
+      "id": "launch_speed",
+      "formula": "3.55*sqrt(w/0.68)*(0.80+0.40*pullRatio)",
+      "file": "main.js:454"
+    },
+    {
+      "id": "launch_angle",
+      "formula": "32 deg constant",
+      "file": "main.js:455"
+    },
+    {
+      "id": "arm_angular_accel",
+      "formula": "34*(w/0.68)*(0.75+0.85*pullRatio)",
+      "file": "main.js:416"
+    }
+  ]
+}
