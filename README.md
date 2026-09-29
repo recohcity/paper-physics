@@ -2,8 +2,6 @@
 
 <img src="src/Paper-Trebuchet.png" alt="Paper Trebuchet — Sketch to Physics" width="100%" />
 
-# Paper Trebuchet — Sketch to Physics
-
 **An interactive 3D trebuchet simulation that grows from a hand-drawn blueprint into a real-time rigid-body physics model.**
 
 [English](#english) · [中文](#中文)
