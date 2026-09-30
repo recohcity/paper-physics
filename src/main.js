@@ -55,6 +55,7 @@ class App {
     this.btnViewHero = document.getElementById('btn-view-hero');
     this.btnViewSide = document.getElementById('btn-view-side');
     this.btnViewTop = document.getElementById('btn-view-top');
+    this.btnView3D = document.getElementById('btn-view-3d');
     this.btnReset = document.getElementById('btn-reset');
     this.soundBtn = document.getElementById('panel-sound-btn');
     this.scrubberMute = document.getElementById('scrubber-mute');
@@ -71,7 +72,13 @@ class App {
     this.timeScale = 1.0;
     this.counterweightKg = UI.counterweight.value; // hover recalibration — spec.js (2.6 kg throws the 0.45 kg ball onto the pyramid)
     this.ballKg = UI.ball.value; // solid steel projectile — spec.js (density 7850 kg/m³, r = 60% of the 100 mm bowl opening)
-    this.flightPathEnabled = true;
+    this.flightPathEnabled = false;
+    // Ball-stand feature: the cannonball starts on a wooden stand at the
+    // lower-left of the paper; a click loads it into the cup, where the beam
+    // settles like a seesaw under the real ball-vs-counterweight torque.
+    this.ballLoaded = false;
+    this.ballStandPos = new THREE.Vector3(-0.90, 0, 0.52); // stand centre on the paper, in FRONT of the trebuchet (faces the camera)
+    this.ballStandSeatY = 0; // ball seat height, filled by createBallStand()
     this.isTourRunning = true;
     this.isTourPlaying = false;
     this.tourAbortController = null;
@@ -84,7 +91,7 @@ class App {
     // 0° = rest (counterweight sitting on chassis floor, spoon up)
     // > 0° = pulled down (counterweight hoisted in the air, spoon down)
     // 84.5° is the exact physical limit where the cradle bottom rests on the paper (Y=0.006)
-    this.MAX_PULL_DEG = 84.5;
+    this.MAX_PULL_DEG = 135; // down-pull limit: beam pulled 135° from vertical -> 45° from mast (max energy) [user:2026-09-29]
     this.pullDeg = 0;
     this.armVelocity = 0;
 
@@ -156,6 +163,10 @@ class App {
     this.controls.minDistance = 0.4;
     this.controls.maxDistance = 8;
     this.controls.update();
+    // Default view = Hero; Hero/Side/Top are FIXED views — free 3D orbit is
+    // only available in 3D mode (user directive 2026-10-01).
+    this.currentView = 'Hero';
+    this.controls.enabled = false;
 
     // Warm natural afternoon lighting
     const ambientLight = new THREE.AmbientLight(0xffeed9, 0.95);
@@ -212,12 +223,19 @@ class App {
     const pivot = new THREE.Vector3();
     this.trebuchet.armPivot.getWorldPosition(pivot);
     this.physics.createMechanism(pivot.x, pivot.y, this.trebuchet.REST_ANGLE);
+    // Physical rope knot chain on the ring (Cannon nodes, see physics.buildRope);
+    // the long winch->ring rope is a dynamic visual Tube (no force transfer).
+    this.trebuchet.physics = this.physics;
+    this.physics.buildRope();
     // Push the UI-default counterweight into the mechanism: createMechanism()
     // builds the cw body with the physics-constructor default (1.0 kg) and no
     // setCwMass() was called before, so the DEFAULT slider value 2.60 never
     // reached the physics body — the arm hung cocked like the ball outweighed
     // the box (mechanism inversion).  Re-assert it now (and on every rebuild).
     this.physics.setCwMass(this.counterweightKg);
+
+    // Ball stand (needs trebuchet.woodMat, so built after the model)
+    this.createBallStand();
 
     // Apply env map only to metal materials
     if (this.envMapTexture) {
@@ -318,6 +336,73 @@ class App {
   }
 
 
+  // Wooden cannonball stand on the lower-left of the paper, in front of the
+  // trebuchet: clear of the counterweight swing arc, the pencil and the block
+  // scatter zone.  Uses the trebuchet wood material (same style family).
+  createBallStand() {
+    // Wooden ball rack per user reference: a two-tier stand.  Bottom layer is
+    // a square base plank; top layer is a square tray with a bowl-shaped
+    // centre depression that cups the cannonball.  Geometry (1 unit = 1 m):
+    // base top y=0.020, tray top y=0.075, bowl mouth at y=0.075 with radius
+    // 0.048 (holds ball r=0.030..0.040, centre settles in the bowl).
+    const stand = new THREE.Group();
+    const wood = this.trebuchet.woodMat;
+    // Compact two-tier proportions so the cannonball (r=0.030..0.040) dominates
+    // the rack like the reference: base 0.14 square, tray 0.11 square, bowl
+    // r=0.042.  Ball sits half-sunk in the bowl and rises clearly above the rim.
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.014, 0.14), wood);
+    base.position.y = 0.006 + 0.007;
+    // Top tray: thin (0.024) square plank with a REAL circular hole cut all the
+    // way through its top face, so the depression is visible from above (a
+    // solid Box + embedded cup would be hidden by the plank face - the bug the
+    // user kept seeing).  Tray bottom y=0.020, tray top y=0.044, hole
+    // diameter 0.100 > the largest ball (0.080).  ExtrudeGeometry: square
+    // shape minus a circular hole, extruded upward, then rotated so the
+    // extrusion axis is +Y.
+    const trayShape = new THREE.Shape();
+    trayShape.moveTo(-0.060, -0.060);
+    trayShape.lineTo(0.060, -0.060);
+    trayShape.lineTo(0.060, 0.060);
+    trayShape.lineTo(-0.060, 0.060);
+    trayShape.closePath();
+    const holePath = new THREE.Path();
+    holePath.absarc(0, 0, 0.050, 0, Math.PI * 2, true);
+    trayShape.holes.push(holePath);
+    const trayGeo = new THREE.ExtrudeGeometry(trayShape, { depth: 0.026, bevelEnabled: false });
+    trayGeo.rotateX(-Math.PI / 2); // extrude axis +Z -> +Y (shape lies in XZ)
+    const tray = new THREE.Mesh(trayGeo, wood);
+    tray.position.y = 0.020; // tray bottom on the base top
+    // Recess bottom: a spherical depression (lower hemisphere cap, ~1/3 sphere)
+    // lathe-turned in the hole, so the cup is a real bowl, not a flat disc.
+    // Sphere R=0.062, mouth r=0.050 flush with the tray top, cup depth 0.025,
+    // bottom 0.001 above the tray bottom.  Double-sided + darker so the bowl
+    // stays visible (the shared wood material must not be modified).
+    const cupMat = wood.clone();
+    cupMat.side = THREE.DoubleSide;
+    cupMat.color.multiplyScalar(0.78);
+    const sphereR = 0.062, rimR = 0.050, trayDepth = 0.026;
+    const yc = trayDepth + Math.sqrt(sphereR * sphereR - rimR * rimR); // sphere centre (local y)
+    const cupPts = [];
+    const CUP_SEG = 14;
+    for (let i = 0; i <= CUP_SEG; i++) {
+      const t = i / CUP_SEG;
+      const r = rimR * (1 - t);
+      cupPts.push(new THREE.Vector2(r, yc - Math.sqrt(sphereR * sphereR - r * r)));
+    }
+    const cup = new THREE.Mesh(new THREE.LatheGeometry(cupPts, 24), cupMat);
+    cup.position.y = 0.020; // cup base flush with the tray bottom
+    [base, tray, cup].forEach((m) => { m.castShadow = true; m.receiveShadow = true; stand.add(m); });
+    stand.position.set(this.ballStandPos.x, 0, this.ballStandPos.z);
+    this.scene.add(stand);
+    this.ballStand = stand;
+    this._ballStandOrig = new Map();
+    stand.traverse((obj) => { if (obj.isMesh) this._ballStandOrig.set(obj, obj.material); });
+    this.ballStandSeatY = 0.020 + 0.001 - 0.005; // ball bottom beds 5mm INTO the cup, no light gap
+    // Physical blocker for the rack: a landed/rolled ball must not slide
+    // through the stand (user: 2026-09-30).
+    this.physics.addBallStandCollider(this.ballStandPos.x, this.ballStandPos.z);
+  }
+
   initAnnotations() {
     this.annotations = new TrajectoryAnnotations(this.annotationCanvas, this.camera);
     this.annotations.setWeight(this.counterweightKg, this.trebuchet.getCounterweightWorldPosition());
@@ -332,14 +417,32 @@ class App {
   // concave bowl is not available in cannon-es and has negligible effect on
   // release speed for a 0.05 m shallow bowl.
   updateBallInCup() {
-    if (!this.physics.ballReleased) {
-      const cupPos = this.trebuchet.getCupWorldPosition();
-      const restOffset = this.trebuchet.cupR - this.physics.ballRadius;
-      this.physics.ballMesh.position.set(cupPos.x, cupPos.y - restOffset, cupPos.z);
-      this.physics.ballBody.position.set(cupPos.x, cupPos.y - restOffset, cupPos.z);
-      this.physics.ballBody.velocity.set(0, 0, 0);
-      this.physics.ballBody.angularVelocity.set(0, 0, 0);
+    if (this.physics.ballReleased) return;
+    // While the ball is seated (not released) keep it collision-free: its body
+    // sits inside the cup / on the stand, and the cup arc swings over the new
+    // chassis body — mask 0 avoids the solver spitting it out.  releaseBall()
+    // flips the mask back to 0xffffffff the moment it flies.
+    this.physics.ballBody.collisionFilterMask = 0;
+    const b = this.physics;
+    if (!this.ballLoaded) {
+      // Ball resting in the stand's arc groove (lower-left of the paper):
+      // centre sits at the groove rim minus the ball radius, so the ball is
+      // visibly cradled between the two side blocks.
+      const sx = this.ballStandPos.x, sy = this.ballStandSeatY, sz = this.ballStandPos.z;
+      const cy = sy + b.ballRadius;
+      b.ballMesh.position.set(sx, cy, sz);
+      b.ballBody.position.set(sx, cy, sz);
+      b.ballBody.velocity.set(0, 0, 0);
+      b.ballBody.angularVelocity.set(0, 0, 0);
+      return;
     }
+    // Ball in the cup: sits on the inner bowl floor (cup centre - (cupR - ballR))
+    const cupPos = this.trebuchet.getCupWorldPosition();
+    const restOffset = this.trebuchet.cupR - b.ballRadius;
+    b.ballMesh.position.set(cupPos.x, cupPos.y - restOffset, cupPos.z);
+    b.ballBody.position.set(cupPos.x, cupPos.y - restOffset, cupPos.z);
+    b.ballBody.velocity.set(0, 0, 0);
+    b.ballBody.angularVelocity.set(0, 0, 0);
   }
 
   // Camera presets — auto-fit entire paper + all objects
@@ -357,7 +460,7 @@ class App {
     this.currentView = viewName;
     const transitionId = ++this.cameraTransitionId;
     this.isCameraTransitioning = duration > 0;
-    [this.btnViewHero, this.btnViewSide, this.btnViewTop].forEach(btn => btn?.classList.remove('active'));
+    [this.btnViewHero, this.btnViewSide, this.btnViewTop, this.btnView3D].forEach(btn => btn?.classList.remove('active'));
 
     // Paper center: (0.12, 0, 0), size 2.7 x 1.85; objects up to y~0.55
     const look = new THREE.Vector3(0.12, 0.12, 0);
@@ -365,19 +468,30 @@ class App {
 
     if (viewName === 'Hero') {
       this.btnViewHero?.classList.add('active');
-      // 3/4 angle: fit paper diagonal (~2.9 wide projected) and height
-      const d = this.getFitDistance(3.0, 1.0);
+      // 3/4 angle: fit the WHOLE scene (trebuchet + block pyramid), paper
+      // diagonal ~2.9 wide projected; widened to 3.4 so the pyramid's far
+      // edge stays fully inside the frame.
+      const d = this.getFitDistance(3.4, 1.1);
       targetPos = new THREE.Vector3(0.12 + d * 0.35, look.y + d * 0.55, look.z + d * 0.85);
     } else if (viewName === 'Side') {
       this.btnViewSide?.classList.add('active');
-      // Side view: fit paper width (2.7) and object height (0.65)
-      const d = this.getFitDistance(2.9, 0.75);
+      // Side view: fit paper width (2.7) and object height (0.65); widened.
+      const d = this.getFitDistance(3.2, 0.85);
       targetPos = new THREE.Vector3(look.x, look.y + d * 0.15, look.z + d);
     } else if (viewName === 'Top') {
       this.btnViewTop?.classList.add('active');
-      // Top view: fit paper width (2.7) and depth (1.85)
-      const d = this.getFitDistance(2.9, 2.0);
+      // Top view: fit paper width (2.7) and depth (1.85); widened.
+      const d = this.getFitDistance(3.3, 2.2);
       targetPos = new THREE.Vector3(look.x, look.y + d, look.z + 0.01);
+    } else if (viewName === '3D') {
+      this.btnView3D?.classList.add('active');
+      // Free 3D orbit: keep the current camera pose, just hand control back
+      // for mouse / trackpad / keyboard navigation.  No camera animation.
+      this.isCameraTransitioning = false;
+      this.controls.enabled = true;
+      this.controls.update();
+      this.updateDragHint();
+      return;
     }
 
     if (duration === 0) {
@@ -385,6 +499,7 @@ class App {
       this.camera.lookAt(look);
       this.controls.target.copy(look);
       this.controls.update();
+      this.controls.enabled = false; // Hero/Side/Top are fixed views
       this.isCameraTransitioning = false;
       this.updateDragHint();
       return;
@@ -397,7 +512,7 @@ class App {
       .onComplete(() => {
         if (transitionId === this.cameraTransitionId) {
           this.controls.target.copy(look);
-          this.controls.enabled = true;
+          this.controls.enabled = false; // Hero/Side/Top are fixed views
           this.controls.update();
           this.isCameraTransitioning = false;
           this.updateDragHint();
@@ -436,13 +551,54 @@ class App {
   }
 
   // Set counterweight mass
+  // Click the stand ball into the cup.  The beam is freed on the live hinge so
+  // it settles like a seesaw under the real torque balance: a heavy ball tips
+  // it cup-down (left-tilted, cannot throw), a heavy counterweight keeps it
+  // ready to drag.
+  loadBall() {
+    if (this.ballLoaded || this.physics.ballReleased || this.isFiring) return;
+    if (this.isTourRunning) return; // the tour drives its own load step
+    this.ballLoaded = true;
+    this.rebalanceLoaded(); // 4:1 lever gate: cw holds right tilt (ready) or ball seesaws down
+    this.updateBallInCup();
+    sound.playTilt(0.6);
+    // No ball-weight callout / no drag instruction when loading by click:
+    // only the slider-adjusted weight hint stays (user directive 2026-10-01).
+  }
+
+  // 4:1 lever balance gate (real-cock hold): with the short arm = 1/4 of the
+  // long arm, the counterweight moment (cw × 1/4L) must beat (ball + beam) × L
+  // for the beam to rest right-tilted (ready).  A heavier ball simply seesaws
+  // the beam cup-down (natural physics) and firing is blocked by ballLoaded
+  // gating + the seesaw stop.  Beam self-moment ~0.037 (kg·m) with arm_x1
+  // -0.596 / arm_x2 0.17, balsa 160 kg/m³.
+  rebalanceLoaded() {
+    if (!this.ballLoaded || this.isFiring || this.isDraggingCup || this.isTourRunning) return;
+    const cwKg = this.counterweightKg;
+    const ballKg = this.ballKg;
+    const cwTorque = cwKg * 0.155;            // short arm 1/4L
+    const beamTorque = ballKg * 0.62 + 0.037; // long arm L + beam self-moment
+    if (cwTorque > beamTorque) {
+      this.physics.setCocked(0);   // counterweight holds the beam right-tilted
+    } else {
+      this.physics.unlockBalance(); // ball wins: seesaw settles cup-down
+    }
+  }
+
   // Set projectile mass (solid steel: radius follows density) and rebuild the
   // hinge mechanism so arm mass/inertia include the new ball.
   setBallMass(kg) {
     this.ballKg = kg;
     if (this.ballLabel) this.ballLabel.textContent = `${kg.toFixed(2)} kg`;
-    this.physics.setBall(kg);
+    this.physics.setBall(kg); // rebuilds the mechanism (locks at rest)
+    this.rebalanceLoaded();
     this.updateBallInCup();
+    if (this.annotations && this.physics.ballMesh) {
+      this.annotations.setBallWeight(kg, this.physics.ballMesh.position);
+      this.annotations.showBallCallout = true;
+      clearTimeout(this._ballCalloutTimeout);
+      this._ballCalloutTimeout = setTimeout(() => { this.annotations.showBallCallout = false; }, 2000);
+    }
   }
 
   setWeight(kg) {
@@ -452,7 +608,10 @@ class App {
     if (this.trebuchet) {
       this.trebuchet.setCounterweight(kg);
     }
-    if (this.physics) this.physics.setCwMass(kg);
+    if (this.physics) {
+      this.physics.setCwMass(kg);
+      this.rebalanceLoaded();
+    }
     if (this.annotations && this.trebuchet) {
       this.annotations.setWeight(kg, this.trebuchet.getCounterweightWorldPosition());
     }
@@ -472,10 +631,21 @@ class App {
     // Keep the existing button shortcut, but never turn a simple spoon click
     // into a launch: only a completed downward drag calls fire(true).
     if (!fromDrag && this.pullDeg < 10) {
-      this.setPullAngle(84.5);
+      this.setPullAngle(this.MAX_PULL_DEG);
     }
 
     this.isFiring = true;
+    // Ghost-impact fix (conditional): rebuild the projectile ONLY when a
+    // previous shot's ball may still rest among the blocks (finishShot left it
+    // in the world — waking the pile with the stale body there shoves the
+    // blocks before the new launch).  When the ball was just loaded fresh
+    // (tour FIRE step, or a build Fire that just loadBall()'d) the stale flag
+    // is clear and we keep the ball exactly where it is, so the launch works.
+    if (this._staleBall) {
+      this.physics.removeProjectile(this.scene);
+      this.physics.createProjectile(this.scene);
+    }
+    this._staleBall = false;
     this.physics.resetImpact();
     sound.playLaunch();
 
@@ -584,6 +754,17 @@ class App {
     // Pin the arm at the stop angle (the arm has reached the hard stop).
     m.lockMechanism();
     this.physics.ballReleased = true;
+    // Activate projectile collisions NOW (it was mask 0 while seated in the
+    // cup).  The ball sits at the cup end of the beam, overlapping the arm and
+    // chassis bodies; under slow-motion (0.25x physics dt) the solver would
+    // keep pushing it for many frames and stall the launch.  So the ball first
+    // collides with blocks (1) and the table (4) ONLY — machine bodies (arm
+    // 2|32, chassis/frame/wheels/winch 64) join 600 ms later, once the ball
+    // has left the machine, so a bounced-back ball is still stopped by it.
+    this.physics.ballBody.collisionFilterMask = 0xffffffff & ~(2 | 32 | 64);
+    setTimeout(() => {
+      if (this.physics.ballReleased) this.physics.ballBody.collisionFilterMask = 0xffffffff;
+    }, 600);
     this.trebuchet.armPivot.rotation.z = this.trebuchet.REST_ANGLE;
     // Do NOT teleport the box to rotation.z=0: at release the box is at rel
     // ~+98 deg (world ~+41 deg lean).  Hand the 3D group to updateMechanism
@@ -615,6 +796,12 @@ class App {
   finishShot(rangeDist) {
     if (!this.isFiring) return;
     this.isFiring = false;
+    // The shot's ball stays in the world after landing (build mode re-seats it
+    // 1.5 s later).  Flag it so the NEXT fire() knows a stale body may be
+    // resting among the blocks and rebuilds the projectile before waking the
+    // pile.  The tour's FIRE step fires a freshly-loaded ball (no finishShot
+    // before it) so it keeps the ball untouched.
+    this._staleBall = true;
     // Safety: if the shot ended before release (e.g. counterweight too light),
     // lock the mechanism bodies back onto the 3D model.
     if (this.physics && this.physics.mechArmBody) {
@@ -646,17 +833,21 @@ class App {
       this.updateDownCount();
     }, 450);
 
-    // In custom (build-it-yourself) mode: after the shot settles, reset arm to rest
-    // and place a fresh ball in the cup so the next throw requires pulling again.
+    // After the shot settles, reset arm to rest and put a fresh ball back on
+    // the stand — the next throw requires loading the ball again (ball-stand
+    // flow).  Build mode only: during the tour the ball must stay in the world
+    // (FIRE -> REPLAY slow-mo rerun -> 3 s reset at REPLAY end, aligned with
+    // fire's build reset), so the tour path resets in the REPLAY/BUILD steps.
     if (!this.isTourRunning) {
       setTimeout(() => {
         if (!this.isFiring) {
+          this.ballLoaded = false; // fresh ball back on the stand
           this.setPullAngle(0);
           this.physics.ballReleased = false;
           this.updateBallInCup();
           this.updateDownCount(); // keep DOWN in sync with cascade topples
         }
-      }, 1500);
+      }, 3000); // ball auto-returns to its rack 3 s after the shot (user: 2026-09-30)
 
       // After blocks have finished toppling, sleep them so window resizing or
       // idle frames don't cause micro-jitter.
@@ -705,11 +896,13 @@ class App {
 
   resetAll() {
     this.isFiring = false;
+    this._staleBall = false; // ball re-seated to the stand — nothing lingering
     this.armVelocity = 0;
 
     // Reset pull to 0° (or current slider value)
     this.setPullAngle(parseInt(this.pullSlider.value) || 0);
 
+    this.ballLoaded = false; // ball back on the stand, re-load to throw
     this.physics.ballReleased = false;
     this.updateBallInCup();
     this.physics.resetBlocks();
@@ -751,6 +944,10 @@ class App {
     this.resetAll();
     this.physics.blockMeshes.forEach(m => m.visible = false);
     if (this.physics.ballMesh) this.physics.ballMesh.visible = false;
+    // 2b. Rope + ball stand belong to the 3D stages — hidden on the READ page
+    // (tour directive 2026-10-01; refresh defaults to READ so they must vanish).
+    if (this.trebuchet.ropeMesh) this.trebuchet.ropeMesh.visible = false;
+    if (this.ballStand) this.ballStand.visible = false;
 
     // 3. UI and Scrubber state: initial 00:00, Play ready
     this.buildPanel.classList.add('hidden');
@@ -800,7 +997,7 @@ class App {
     }
   }
 
-  // Guided Tour sequence — 8 steps.  playTourFrom(startStep) lets the
+  // Guided Tour sequence — 9 steps.  playTourFrom(startStep) lets the
   // scrubber seek to any step: it lands on that step's start state, then
   // replays from there to the end.
   tourSetup() {
@@ -810,6 +1007,20 @@ class App {
     }
     this.tourAbortController = new AbortController();
     this.isTourRunning = true;
+    // Demo defaults: always run the tour with a configuration that actually
+    // knocks blocks over, ignoring leftover build-mode slider values (e.g. a
+    // 6-10 kg build leftover overshoots the tower and the demo hits nothing).
+    // Tour demo config — aligned with the build Fire mechanics (user
+    // directive 2026-09-30): fire() applies MAX_PULL_DEG=135 and the panel
+    // counterweight, exactly like the build Fire button.  The demo uses
+    // 6.0 kg counterweight + 0.60 kg ball, measured stable 9/10 blocks down
+    // (2.96 m/s, range 0.34 m) — the "demo counterweight must topple blocks"
+    // requirement.  (4.8/0.45 overshoots the tower at 2.99 m/s / 0.84 m.)
+    this.setWeight(6.0);
+    this.ballKg = 0.60;
+    if (this.ballLabel) this.ballLabel.textContent = '0.60 kg';
+    if (this.ballSlider) this.ballSlider.value = 0.60;
+    if (this.physics) this.physics.setBall(0.60);
     this.setPlayButtonState(true);
     this.buildPanel.classList.add('hidden');
     this.dragHint.classList.add('hidden');
@@ -820,12 +1031,17 @@ class App {
   }
 
   async playTour() {
+    // Clear any build-mode leftovers (scattered blocks, loaded ball, stats)
+    // so the demo always starts from its canonical first frame.
+    this.resetToFirstFrame();
     this.tourSetup();
     await this.playTourFrom(0);
   }
 
   // Land the world on step i's START state (no animation), then replay i..7.
   async seekTourStep(i) {
+    // Hotspot jump must also clear build-mode leftovers, not replay them.
+    this.resetAll();
     this.tourSetup();
     this.applyTourStepStart(i);
     // Play ONLY this step (hotspot view mode): it runs once and pauses at its
@@ -852,6 +1068,11 @@ class App {
     this.physics.lockMechanism();
     this.setPullAngle(0);
 
+    // Rope + ball stand: hidden for the blueprint/cutout stages, visible
+    // from the MODEL stage onward (tour directive 2026-10-01).
+    if (t.ropeMesh) t.ropeMesh.visible = i >= 2;
+    if (this.ballStand) this.ballStand.visible = i >= 2;
+
     if (i >= 2) { // step 2 start: cutouts flat on paper, sketch hidden, Side view
       this.environment.hidePaperSketch();
       if (this.cutoutMesh) {
@@ -870,36 +1091,149 @@ class App {
       t.group.visible = true;
       t.setMorphFactor(0.66);
       this.physics.setMorphFactor(0.66);
+      this.applyMorphToExtras(0.66);
       this.physics.blockMeshes.forEach(m => m.visible = true);
       if (this.cutoutMesh) this.cutoutMesh.visible = false;
       if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
+      // White-clay ball visible on the stand (consistent with morph MODEL stage)
+      this.ballLoaded = false;
+      if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
+      this.updateBallInCup();
     }
-    if (i >= 4) { // step 4 start: full material, ball in cup, Hero view
+    if (i >= 4) { // step 4 start: full material, ball on the stand, Hero view
       t.setMorphFactor(1.0);
       this.physics.setMorphFactor(1.0);
+      this.applyMorphToExtras(1.0);
       this.setCameraView('Hero', 0);
       this.physics.ballReleased = false;
+      this.ballLoaded = false; // ball sits on the stand until FIRE loads it
       this.setPullAngle(0);
       if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
       this.updateBallInCup();
     }
-    if (i >= 5) { // step 5 start: full material + all part labels
+    if (i >= 5) { // step 5 (PARTS) start: full material + all part labels
       this.annotations.setPartLabels(this.getTourPartLabels(), this.getTourPartLabels().length, this.getLabelCenter());
     }
-    if (i >= 6) { // step 6 start: labels off, blocks standing, ball in cup
+    if (i >= 6) { // step 6 (FIRE) start: ball in cup, labels off
       this.annotations.setPartLabels(null, 0);
       this.physics.resetBlocks();
       this.physics.ballReleased = false;
+      this.ballLoaded = true; // loaded by the FIRE step
       this.setPullAngle(0);
       this.updateBallInCup();
     }
-    if (i >= 7) { // step 7 start: slow-mo replay, blocks reset, ball in cup
+    if (i >= 7) { // step 7 (REPLAY) start: slow-mo replay, blocks reset, ball loaded
       this.setSlowMo(true);
       this.physics.resetBlocks();
       this.physics.ballReleased = false;
+      this.ballLoaded = true;
       this.setPullAngle(0);
       this.updateBallInCup();
     }
+  }
+
+  // Morph the scene-level extras (rope + ball stand) through the same stages
+  // as the trebuchet group: paper -> white clay -> full material.
+  applyMorphToExtras(f) {
+    const t = this.trebuchet;
+    if (!t) return;
+    if (t.ropeMesh) t.ropeMesh.visible = f > 0.02;
+    if (this.ballStand) {
+      this.ballStand.visible = f > 0.02;
+      this.ballStand.traverse((obj) => {
+        if (obj.isMesh) {
+          if (f <= 0.33) obj.material = t.paperMat;
+          else if (f <= 0.66) obj.material = t.blendMat;
+          else obj.material = (this._ballStandOrig && this._ballStandOrig.get(obj)) || obj.material;
+        }
+      });
+    }
+  }
+
+  // Drive the sketch->model stages exactly like tour steps 1-4:
+  // 0 READ (blueprint only) / 0-33 LIFT (2D cutouts stand up, 3D hidden) /
+  // 33-66 MODEL (cutouts fade, white 3D model) / 66-100 WOOD (full material).
+  applyMorphToStage(v) {
+    const t = this.trebuchet;
+    const ph = this.physics;
+    if (v <= 0) {
+      // READ: blueprint on paper, everything hidden
+      this.environment.showPaperSketch();
+      t.group.visible = false;
+      t.setMorphFactor(0);
+      ph.setMorphFactor(0);
+      this.applyMorphToExtras(0);
+      if (this.cutoutMesh) this.cutoutMesh.visible = false;
+      if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
+      ph.blockMeshes.forEach(m => m.visible = false);
+      if (ph.ballMesh) ph.ballMesh.visible = false;
+      return;
+    }
+    if (v <= 33) {
+      // LIFT: cutouts lie flat -> stand up; 3D group stays hidden
+      this.environment.hidePaperSketch();
+      const k = v / 33;
+      t.group.visible = false;
+      t.setMorphFactor(0.01);
+      ph.setMorphFactor(0.01);
+      this.applyMorphToExtras(0.01);
+      if (this.cutoutMesh) {
+        this.cutoutMesh.visible = k > 0.02;
+        this.cutoutMesh.rotation.x = -Math.PI / 2 + k * (Math.PI / 2);
+        this.cutoutMesh.material.opacity = 1;
+      }
+      if (this.blocksCutoutMesh) {
+        this.blocksCutoutMesh.visible = k > 0.02;
+        this.blocksCutoutMesh.rotation.x = -Math.PI / 2 + k * (Math.PI / 2);
+        this.blocksCutoutMesh.material.opacity = 1;
+      }
+      ph.blockMeshes.forEach(m => m.visible = false);
+      if (ph.ballMesh) ph.ballMesh.visible = false;
+      return;
+    }
+    if (v <= 66) {
+      // MODEL: cutouts fade out, white 3D model emerges
+      const k = (v - 33) / 33;
+      this.environment.hidePaperSketch();
+      if (this.cutoutMesh) {
+        this.cutoutMesh.material.opacity = 1 - k;
+        if (k >= 1) this.cutoutMesh.visible = false;
+      }
+      if (this.blocksCutoutMesh) {
+        this.blocksCutoutMesh.material.opacity = 1 - k;
+        if (k >= 1) this.blocksCutoutMesh.visible = false;
+      }
+      t.group.visible = true;
+      t.setMorphFactor(0.01 + k * 0.65);
+      ph.setMorphFactor(0.01 + k * 0.65);
+      this.applyMorphToExtras(0.01 + k * 0.65);
+      ph.blockMeshes.forEach(m => m.visible = true);
+      // White-clay ball on the stand once the 3D model emerges
+      this.ballLoaded = false;
+      if (ph.ballMesh) ph.ballMesh.visible = true;
+      this.updateBallInCup();
+      return;
+    }
+    // WOOD: white -> full material
+    const k = (v - 66) / 34;
+    this.environment.hidePaperSketch();
+    t.group.visible = true;
+    t.setMorphFactor(0.66 + k * 0.34);
+    ph.setMorphFactor(0.66 + k * 0.34);
+    this.applyMorphToExtras(0.66 + k * 0.34);
+    ph.blockMeshes.forEach(m => m.visible = true);
+    if (ph.ballMesh) ph.ballMesh.visible = true;
+    this.updateBallInCup();
+  }
+
+  updateMorphStage(v) {
+    const el = document.getElementById('morph-stage');
+    if (!el) return;
+    let name = 'READ';
+    if (v > 16 && v <= 49) name = 'LIFT';
+    else if (v > 49 && v <= 83) name = 'MODEL';
+    else if (v > 83) name = 'WOOD';
+    el.textContent = name;
   }
 
   getTourPartLabels() {
@@ -935,14 +1269,31 @@ class App {
       bm.forEach((m) => { if (m && m.getWorldPosition) { m.getWorldPosition(tmp); acc.add(tmp); k++; } });
       if (k) blocksV = acc.divideScalar(k);
     }
+    // Ball anchor: while the tour shows PARTS the ball still sits on the stand
+    // (lower-left), so point at the ball itself (physics.ballMesh).
+    const ballPos = this.physics && this.physics.ballMesh
+      ? wp(this.physics.ballMesh)
+      : new THREE.Vector3(t.group.position.x - 0.9, 0.06, 0.52);
+    // Rope anchor: midpoint of the taut rope between ring (A) and drum (B),
+    // maintained every frame by trebuchet.ropeUpdate.
+    const ropePos = t.ropeMidpoint && t.ropeMidpoint.lengthSq() > 0
+      ? t.ropeMidpoint.clone()
+      : new THREE.Vector3(t.group.position.x - 0.45, 0.30, 0);
+    // Chassis anchor moved to the deck's front-right corner: the old centre
+    // anchor pushed its label down-left onto the ball stand.  Front-right
+    // (x+0.35, z+0.12) keeps the dot on the real deck while the label fans
+    // away from the stand and the wheels.
+    const chassisV = new THREE.Vector3(t.group.position.x + 0.35, 0.06, 0.12);
     return [
       { name: 'Counterweight 配重箱', pos: wp(t.counterweightMesh) },
       { name: 'Arm 摆杆', pos: armV },
-      { name: 'Chassis 底座', pos: wp(t.chassisMesh) },
+      { name: 'Chassis 底座', pos: chassisV },
       { name: 'A-frame 支架', pos: wp(t.aframeMesh) },
-      { name: 'Ball 球', pos: wp(t.cupMesh) },
+      { name: 'Cup 投射杯', pos: wp(t.cupMesh) },
+      { name: 'Ball 球', pos: ballPos },
       { name: 'Wheels 轮', pos: wheelAnchor(t.wheelMesh) },
       { name: 'Blocks 箱子', pos: blocksV },
+      { name: 'Rope 拉索', pos: ropePos },
     ];
   }
 
@@ -1006,9 +1357,11 @@ class App {
         if (this.blocksCutoutMesh) this.blocksCutoutMesh.visible = false;
         this.physics.blockMeshes.forEach(m => m.visible = false);
         if (this.physics.ballMesh) this.physics.ballMesh.visible = false;
+        if (this.trebuchet.ropeMesh) this.trebuchet.ropeMesh.visible = false;
+        if (this.ballStand) this.ballStand.visible = false;
 
         this.setCameraView('Top', 800);
-        this.showTourBanner('1/8 Blueprint — hand-drawn trebuchet sketch on engineering paper');
+        this.showTourBanner('1/8 Blueprint — hand-drawn trebuchet sketch (rope + ball stand) on engineering paper');
         this.updateScrubber(0.06, '00:05');
         this.highlightTourStep(0);
         await sleep(1400);
@@ -1021,6 +1374,8 @@ class App {
         this.environment.hidePaperSketch();
         this.showTourBanner('2/8 Blueprint outline highlights, then lifts off as 2D cutouts');
         this.updateScrubber(0.19, '00:16');
+        if (this.trebuchet.ropeMesh) this.trebuchet.ropeMesh.visible = false;
+        if (this.ballStand) this.ballStand.visible = false;
         this.highlightTourStep(1);
 
         // Outline highlight: cutouts fade in flat on the paper (contours emerge)
@@ -1068,7 +1423,12 @@ class App {
         this.trebuchet.group.visible = true;
         this.trebuchet.setMorphFactor(0.01);
         this.physics.setMorphFactor(0.33);
+        this.applyMorphToExtras(0.01);
         this.physics.blockMeshes.forEach(m => m.visible = true);
+        // White-clay ball on the stand with the white model (consistent with morph MODEL)
+        this.ballLoaded = false;
+        if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
+        this.updateBallInCup();
 
         await Promise.all([
           tweenPromise(
@@ -1079,6 +1439,7 @@ class App {
             (o) => {
               this.trebuchet.setMorphFactor(o.f);
               this.physics.setMorphFactor(o.f);
+              this.applyMorphToExtras(o.f);
               this.morphSlider.value = Math.round(o.f * 100);
             }
           ),
@@ -1114,6 +1475,7 @@ class App {
           (o) => {
             this.trebuchet.setMorphFactor(o.f);
             this.physics.setMorphFactor(o.f);
+            this.applyMorphToExtras(o.f);
             this.morphSlider.value = Math.round(o.f * 100);
           }
         );
@@ -1129,7 +1491,7 @@ class App {
       // -----------------------------------------------------------------
       if (startStep <= 4 && (singleStep === null || singleStep === 4)) {
         this.showTourBanner('5/8 Parts — labels point to each major component');
-        this.updateScrubber(0.68, '00:57');
+        this.updateScrubber(0.65, '00:55');
         this.highlightTourStep(4);
         const labels = this.getTourPartLabels();
         for (let i = 1; i <= labels.length; i++) {
@@ -1140,67 +1502,89 @@ class App {
       }
 
       // -----------------------------------------------------------------
-      // Step 6: 先示意，然后执行拖拽摆杆完成发射
+      // Step 6 (index 5): 先示意，然后执行拖拽摆杆完成发射
+      // (LOAD was removed: the ball flies into the cup here as a short intro)
       // -----------------------------------------------------------------
       if (startStep <= 5 && (singleStep === null || singleStep === 5)) {
         this.showTourBanner('6/8 Hold the cup, pull down, let go — fire!');
-        this.updateScrubber(0.84, '01:11');
+        this.updateScrubber(0.78, '01:06');
         this.highlightTourStep(5);
         this.annotations.setPartLabels(null, 0);
 
-        // 示意：animated drag hint over the cup
-        this.annotations.showDragHint(this.trebuchet.getCupWorldPosition());
-        await sleep(2000);
-        this.annotations.hideDragHint();
 
-        // 执行拖拽（模拟按住碗下拉再松手）
-        let lastPullSoundAngle = 0;
+        // Aligned with build Fire (user directive 2026-09-30): load the ball
+        // into the cup, then fire().  fire() itself applies MAX_PULL_DEG=135
+        // (45° from mast) when the beam is at rest, and uses the current panel
+        // counterweight — exactly the build Fire button path.  No custom pull
+        // tween, no tour-specific angle/counterweight.
+        this.ballLoaded = false;
+        this.updateBallInCup();
+        const standBall = new THREE.Vector3(
+          this.ballStandPos.x,
+          this.ballStandSeatY + this.physics.ballRadius,
+          this.ballStandPos.z
+        );
+        const cupTarget = this.trebuchet.getCupWorldPosition();
+        cupTarget.y -= this.trebuchet.cupR - this.physics.ballRadius;
+        sound.playTilt(0.5);
         await tweenPromise(
-          { pull: 0 },
-          { pull: 84.5 },
-          900,
-          TWEEN.Easing.Cubic.Out,
+          { f: 0 },
+          { f: 1 },
+          600,
+          TWEEN.Easing.Quadratic.InOut,
           (o) => {
-            this.setPullAngle(o.pull);
-            if (Math.abs(o.pull - lastPullSoundAngle) >= 5) {
-              sound.playTilt(0.4);
-              lastPullSoundAngle = o.pull;
-            }
+            this.physics.ballMesh.position.lerpVectors(standBall, cupTarget, o.f);
           }
         );
-        await sleep(250);
+        this.ballLoaded = true;
+        this.updateBallInCup();
+        await sleep(300);
         this.fire();
-        await sleep(2400);
+        // 2 s after fire the replay step takes over (user directive:
+        // "改2秒后进入replay").  If FIRE's shot is still live (ball bounced
+        // off the tower and hasn't "landed"), REPLAY force-finishes it before
+        // its own fire(), so this is always a clean 2 s hand-off.
+        await sleep(2000);
       }
 
       // -----------------------------------------------------------------
-      // Step 7: 慢镜回放刚才的发射
+      // Step 8 (index 7): 慢镜回放刚才的发射
       // -----------------------------------------------------------------
       if (startStep <= 6 && (singleStep === null || singleStep === 6)) {
         this.showTourBanner('7/8 Slow-motion replay at quarter speed (0.25×)');
-        this.updateScrubber(0.94, '01:19');
+        this.updateScrubber(0.88, '01:15');
         this.highlightTourStep(6);
+        // Re-seat the ball into the cup BEFORE waking the pile: the previous
+        // shot's ball still rests among the blocks and would shove them the
+        // moment they wake ("invisible impact" in the replay too).
+        // FIRE's shot may still be live (tower-bounce keeps y above the landing
+        // threshold): force-finish it so REPLAY's fire() starts from a clean
+        // mechanism state.  Ball stays in the world (tour path never
+        // auto-returns it mid-replay).
+        if (this.isFiring) {
+          const rd = this.physics.ballMesh
+            ? Math.max(0, this.physics.ballMesh.position.x - (this.launchPos ? this.launchPos.x : 0))
+            : 2.15;
+          this.finishShot(rd);
+        }
+        this.physics.ballReleased = false;
+        this.ballLoaded = true; // the FIRE shot's ball rests in the world — seat it
+        this.updateBallInCup();
         this.physics.resetBlocks();
         this.physics.wakeBlocks();
-        this.physics.ballReleased = false;
-        this.updateBallInCup();
         this.setSlowMo(true);
 
-        let lastReplayPullSound = 0;
-        await tweenPromise(
-          { pull: 0 },
-          { pull: 84.5 },
-          700,
-          TWEEN.Easing.Cubic.Out,
-          (o) => {
-            this.setPullAngle(o.pull);
-            if (Math.abs(o.pull - lastReplayPullSound) >= 5) {
-              sound.playTilt(0.4);
-              lastReplayPullSound = o.pull;
-            }
-          }
-        );
-        await sleep(200);
+        // Aligned with build Fire (user directive 2026-09-30): fire() applies
+        // MAX_PULL_DEG=135 and the current panel counterweight by itself.
+        // FIRE left pullDeg=135, which would make fire() skip the re-cock and
+        // release from REST at omega~0 (replay instantly settles) — reset it
+        // so the replay launches the full pull.
+        // The slow-mo replay must show the flight path (user 2026-10-01):
+        // enable it for this rerun; showBuildPanel switches it back off.
+        this.flightPathEnabled = true;
+        this.btnToggleFlightPath.classList.add('active');
+        this.annotations.showTrajectories = true;
+        this.pullDeg = 0;
         this.fire();
         // Full slow-mo replay: keep playing until the iron ball leaves the
         // scene (flies out of view) or comes to rest after impact — never
@@ -1208,33 +1592,50 @@ class App {
         const ballMesh = this.physics.ballMesh;
         const ballBody = this.physics.ballBody;
         const replayStart = performance.now();
+        let _replayImpactT = 0; // wall-clock of the first real impact (post slow-mo)
         await new Promise((resolve) => {
           const check = () => {
             const v = new THREE.Vector3();
             if (ballMesh && ballMesh.getWorldPosition) ballMesh.getWorldPosition(v);
             const out = Math.abs(v.x) > 2.5 || v.y < -0.3 || Math.abs(v.z) > 2.0;
             const settled = ballBody && this.physics.ballReleased && ballBody.velocity.length() < 0.06;
-            if (out || settled || performance.now() - replayStart > 24000) resolve();
+            // Slow-mo covers launch -> impact only.  The instant the ball
+            // really hits (block tower / table, _impactMomentum set by the
+            // collide listener), resume real speed for the rest of the replay
+            // (user directive 2026-10-01).
+            if (this.physics._impactMomentum > 0 && this.slowMotion) this.setSlowMo(false);
+            if (this.physics._impactMomentum > 0 && _replayImpactT === 0) _replayImpactT = performance.now();
+            // After the real impact the ball may roll at ~0.1 m/s for a very
+            // long time (settled never trips) — cap the post-impact phase at
+            // 5 s so the replay ends briskly after the blocks finish toppling.
+            const postImpactDone = _replayImpactT > 0 && performance.now() - _replayImpactT > 5000;
+            if (out || settled || postImpactDone || performance.now() - replayStart > 24000) resolve();
             else requestAnimationFrame(check);
           };
           check();
         });
+        // Replay done — reset time aligned with fire (3 s ball auto-return),
+        // then the BUILD step cleans the demo scene.
+        await sleep(3000);
       }
 
       // -----------------------------------------------------------------
-      // Step 8: 切到 build it yourself
+      // Step 9 (index 8): 切到 build it yourself
       // -----------------------------------------------------------------
       if (startStep <= 7 && (singleStep === null || singleStep === 7)) {
         this.showTourBanner('8/8 Tour complete — now build it yourself');
-        this.updateScrubber(1.0, '01:24');
+        this.updateScrubber(1.0, '01:25');
         this.highlightTourStep(7);
         // End state: no auto fire, no leftover replay — just reset to the
         // manipulable idle state and switch to build-it-yourself mode.
+        // (Full-run path: REPLAY ends -> automatically lands here -> BUILD.)
         this.setSlowMo(false);
         this.physics.resetBlocks();
         this.physics.ballReleased = false;
+        this.ballLoaded = false; // clean the demo scene: ball returns to the rack
         this.setPullAngle(0);
         this.updateBallInCup();
+        this.updateDownCount(); // DOWN back to 0/10 after the demo reset
         this.setPlayButtonState(false);
         await sleep(400);
         this.hideTourBanner();
@@ -1323,6 +1724,15 @@ class App {
     this.morphSlider.value = 100;
     this.physics.blockMeshes.forEach(m => m.visible = true);
     if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
+    // Ball stand + rope belong to the real build scene: resetToFirstFrame hid
+    // them for the READ page — restore them when entering build (user 2026-10-01).
+    if (this.trebuchet.ropeMesh) this.trebuchet.ropeMesh.visible = true;
+    if (this.ballStand) this.ballStand.visible = true;
+
+    // Build mode starts with the flight path OFF (user directive 2026-10-01).
+    this.flightPathEnabled = false;
+    this.btnToggleFlightPath.classList.remove('active');
+    this.annotations.clear();
 
     this.buildPanel.classList.remove('hidden');
     this.showDragHintFor(2000);
@@ -1330,10 +1740,16 @@ class App {
     this.annotations.showTrajectories = false;
     this.updateNavButtons('build');
 
-    // Reset arm to rest (0° pull, counterweight on floor, spoon up)
+    // Reset arm to rest (0° pull, counterweight on floor, spoon up); the ball
+    // starts on the stand — the player loads it by clicking.  Also reset any
+    // scattered demo blocks (jumping into build mid-tour must clean the tour
+    // scene, user 2026-10-01).
+    this.physics.resetBlocks();
+    this.ballLoaded = false;
     this.setPullAngle(0);
     this.physics.ballReleased = false;
     this.updateBallInCup();
+    this.updateDownCount();
     this.updateDragHint();
 
     if (this.currentView === 'Top') {
@@ -1343,7 +1759,9 @@ class App {
 
   updateDragHint() {
     if (!this.dragHint || this.isTourRunning) return;
-    const message = this.currentView === 'Top'
+    let message;
+    if (!this.ballLoaded) message = 'Click the cannonball on the stand to load it';
+    else message = this.currentView === 'Top'
       ? 'Top view: use the controls to launch'
       : 'Hold the cup, pull down, and let go';
     this.dragHint.innerHTML = `<span class="dot">●</span> ${message}`;
@@ -1392,6 +1810,10 @@ class App {
       // The panel is available in custom mode, including Top view.  The tour
       // stays playback-only even if a hidden control receives a focus event.
       if (this.isTourRunning) return;
+      if (!this.ballLoaded) {
+        sound.init();
+        this.loadBall(); // Fire auto-picks the cannonball from the stand
+      }
       sound.init();
       this.fire();
     });
@@ -1434,23 +1856,30 @@ class App {
       sound.playTilt(0.45);
     });
 
-    // Morph slider (Sketch to Model)
+    // Morph slider (Sketch to Model) — stages aligned to tour steps 1-4:
+    // READ(0) -> LIFT(33, 2D cutouts stand up) -> MODEL(66, white 3D) -> WOOD(100, material)
     this.morphSlider.addEventListener('input', (e) => {
-      const factor = parseInt(e.target.value) / 100;
-      this.trebuchet.setMorphFactor(factor);
-      this.physics.setMorphFactor(factor);
-      // Blocks visible once past sketch phase
-      this.physics.blockMeshes.forEach(m => m.visible = factor > 0.05);
-      if (this.physics.ballMesh) this.physics.ballMesh.visible = factor > 0.05;
-      // Show/hide pencil sketch on paper
-      if (factor <= 0.05) this.environment.showPaperSketch();
-      else this.environment.hidePaperSketch();
+      const v = parseInt(e.target.value);
+      this.applyMorphToStage(v);
+      this.updateMorphStage(v);
+    });
+
+    // Snap to the nearest tour stage on release
+    this.morphSlider.addEventListener('change', () => {
+      const snaps = [0, 33, 66, 100];
+      const v = parseInt(this.morphSlider.value);
+      let best = snaps[0];
+      for (const sn of snaps) if (Math.abs(v - sn) < Math.abs(v - best)) best = sn;
+      this.morphSlider.value = best;
+      this.applyMorphToStage(best);
+      this.updateMorphStage(best);
     });
 
     // Camera view buttons
     this.btnViewHero.addEventListener('click', () => this.setCameraView('Hero'));
     this.btnViewSide.addEventListener('click', () => this.setCameraView('Side'));
     this.btnViewTop.addEventListener('click', () => this.setCameraView('Top'));
+    this.btnView3D.addEventListener('click', () => this.setCameraView('3D', 0));
 
     // Zoom slider
     this.zoomSlider.addEventListener('input', (e) => {
@@ -1494,6 +1923,14 @@ class App {
       btn.addEventListener('click', () => {
         sound.init();
         const step = parseInt(btn.dataset.step, 10);
+        // BUILD (step 7) exits the tour straight into build mode: the ball
+        // stays on the stand (NOT auto-loaded) and no slow-mo replay runs.
+        // Seeking it through applyTourStepStart(7) would pre-load the ball
+        // and enable slow-mo for the build panel.
+        if (step === 7) {
+          this.showBuildPanel();
+          return;
+        }
         this.seekTourStep(step);
       });
     });
@@ -1508,7 +1945,7 @@ class App {
         return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       };
       const seekTime = (p) => {
-        const t = Math.round(p * 84);
+        const t = Math.round(p * 85);
         const m = Math.floor(t / 60), s = t % 60;
         return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
       };
@@ -1574,19 +2011,31 @@ class App {
         e.button !== 0 ||
         this.isFiring ||
         this.isTourRunning ||
-        this.currentView === 'Top' ||
-        this.isCameraTransitioning ||
-        this.physics.ballReleased  // No ball in cup → can't drag
+        this.isCameraTransitioning
       ) return;
       const bounds = this.renderer.domElement.getBoundingClientRect();
       this.mouse.x = ((e.clientX - bounds.left) / bounds.width) * 2 - 1;
       this.mouse.y = -((e.clientY - bounds.top) / bounds.height) * 2 + 1;
 
       this.raycaster.setFromCamera(this.mouse, this.camera);
-      const objectsToTest = [this.trebuchet.cupMesh, this.physics.ballMesh].filter(Boolean);
+      const standMeshes = this.ballStand ? Array.from(this.ballStand.children) : [];
+      const objectsToTest = [this.trebuchet.cupMesh, this.physics.ballMesh, ...standMeshes].filter(Boolean);
       const intersects = this.raycaster.intersectObjects(objectsToTest, true);
 
       if (intersects.length > 0) {
+        const hitBall = intersects.some((h) => h.object === this.physics.ballMesh);
+        const hitStand = intersects.some((h) => standMeshes.includes(h.object));
+        const hitCup = intersects.some((h) => h.object === this.trebuchet.cupMesh);
+        // Load the cannonball: clicking the ball, its stand, OR the bowl/arm
+        // itself places the ball into the cup (pick-up, not drag — any view).
+        if (!this.ballLoaded && (hitBall || hitStand || hitCup)) {
+          this.loadBall();
+          // Fall through into the drag grab: the ball appears in the cup and
+          // the spoon is already held — pull down without releasing the mouse
+          // (user directive 2026-10-01).  Top view still drops out below.
+        }
+        // Empty cup / released ball → nothing to drag.
+        if (this.currentView === 'Top' || !this.ballLoaded || this.physics.ballReleased) return;
         this.controls.enabled = false; // spoon drag takes the pointer
         // Preserve the grab height at the exact point touched.  The drag
         // plane is parallel to the arm's XY rotation plane and goes through
@@ -1673,7 +2122,7 @@ class App {
 
     // OrbitControls damping needs a per-frame update. During the tour and
     // camera transitions the view is scripted, so the orbit stays disabled.
-    if (this.isTourRunning || this.isCameraTransitioning || this.isDraggingCup) {
+    if (this.isTourRunning || this.isCameraTransitioning || this.isDraggingCup || this.currentView !== '3D') {
       this.controls.enabled = false;
     } else {
       this.controls.enabled = true;
@@ -1683,6 +2132,9 @@ class App {
     // Step physics
     this.physics.step(delta);
     this.physics.updateBlockHitVisuals();
+    // Rope follows the beam ring every frame (shortens while cocking, lengthens
+    // while the arm rebounds after release)
+    this.trebuchet.ropeUpdate();
     // Keep DOWN live after a completed shot: cascading topples can continue for
     // seconds, and the counter must match the knocked-down block visuals exactly.
     if (this.showFlightAnnotations) {
@@ -1696,6 +2148,7 @@ class App {
     const trebGroup = this.trebuchet.group;
     if (Math.abs(this.recoilVel) > 1e-4 || Math.abs(trebGroup.position.x - this.recoilBaseX) > 1e-4) {
       trebGroup.position.x += this.recoilVel * delta;
+      this.physics.syncChassis(trebGroup.position.x);
       this.recoilVel += ((this.recoilBaseX - trebGroup.position.x) * 90 - this.recoilVel * 12) * delta;
       if (Math.abs(this.recoilVel) < 1e-4 && Math.abs(trebGroup.position.x - this.recoilBaseX) < 1e-4) {
         trebGroup.position.x = this.recoilBaseX;
@@ -1707,9 +2160,21 @@ class App {
     // release at the stop angle, or finish the shot when the ball lands.
     this.updateMechanism();
 
-    // Keep ball in cup if resting
+    // Loaded-ball balance: while the ball sits in the cup and the user is not
+    // dragging or firing, the beam swings freely under the real torque — sync
+    // the 3D arm + counterweight from the physics bodies every frame.
+    if (this.ballLoaded && !this.isFiring && !this.isDraggingCup && !this.isTourRunning) {
+      this.trebuchet.armPivot.rotation.z = this.physics.getArmAngle();
+      this.trebuchet.cwGroup.rotation.z = this.physics.getCwRelAngle();
+    }
+
+    // Keep ball in cup / on stand if resting
     if (!this.physics.ballReleased) {
       this.updateBallInCup();
+    }
+    // Ball weight callout follows the ball (stand or cup)
+    if (this.annotations && this.physics.ballMesh) {
+      this.annotations.setBallWeight(this.ballKg, this.physics.ballMesh.position);
     }
 
     // Keep floating counterweight tag position updated

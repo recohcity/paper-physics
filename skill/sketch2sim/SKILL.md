@@ -30,6 +30,15 @@ physically work is worse than no model, because it will be believed.
 4. **Run the feasibility gate before building UI** (below). It takes minutes and catches designs that cannot work.
 5. **State what is not modeled.** Rigid-body physics does not cover strength, fatigue, material flex, heat,
    fluids or manufacturing tolerance. Say so in every report.
+6. **Respect natural mechanics; never fake it with guard code.** A "cannot fire / not ready / inverted"
+   state must come from real torques, masses and collision limits — the default parameter set is what keeps
+   the mechanism ready (driver torque > payload torque), not a logic lock. If the player's combination makes
+   the beam tilt the wrong way, let it tilt: the physics decides throwability. The only acceptable hard stops
+   are collision behaviours (arm-to-chassis, cup-to-deck).
+7. **Decorative parts are visual-follow, never force-follow.** Ropes, winches, drums, hand cranks, dials and
+   indicators must not transmit force and must not carry a collider that touches the throw. Their motion is a
+   kinematic mapping of a real state (arm angle -> rope length / drum rotation / direction sign). Changing a
+   decorative part must not change any launch readout (checklist T6).
 
 ## Workflow (local / Claude Code route)
 
@@ -57,9 +66,11 @@ physically work is worse than no model, because it will be believed.
    failure regions, and search for parameter changes that fix a failing design (`scripts/search_fix.mjs`).
 7. **Interaction and instruments.** Direct manipulation (drag = temporary override, release = hand back to
    dynamics), input ranges derived from geometry, live readouts, slow motion, replay, view presets. For
-   tours, part labels, hotspots and any scene prop the user can interact with, run checklist items T1-T5
+   tours, part labels, hotspots and any scene prop the user can interact with, run checklist items T1-T7
    (anchors from real mesh positions, deterministic label layout, explicit step end conditions, static end
-   state, real colliders for participating props).
+   state, real colliders for participating props, decorative parts decoupled from dynamics, one-pointer
+   compound interactions). Before slow-mo/replay demos, run P7 (staged collision activation for a projectile
+   that starts overlapping the launcher) and the event-driven replay end condition (T3, pitfall 23).
 8. **Code architecture.** Keep one runtime source of truth (`src/spec.js` pattern: physics / 3D / UI read
    the same module that mirrors the Spec), split controller files that exceed ~800 lines, and remove stale
    comments and temp hooks. Run `references/architecture-checklist.md`; a refactor must not move the physics
@@ -139,12 +150,16 @@ evidence. Worked example: `audit/paper-trebuchet-audit.md`.
 
 Validated on one case (paper-trebuchet): Spec extraction, reference solver, energy check, sweeps, fix search,
 audit checklist, and the V2 engine cross-check (`xcheck_suite.mjs`, 5/5 variants within ~5% on speed and
-angle). The audit has since survived four more rounds: V2 cross-check landed the two cannon-es modeling bugs
+angle). The audit has since survived six rounds: V2 cross-check landed the two cannon-es modeling bugs
 (pitfalls 12-13); V3 added checklist items M6 (declared values must reach runtime bodies — the
 "2.60 kg default never reached physics" inversion) and P6 (background-tab rAF freeze artifact), plus the
 front-end sampling-bias note on V2 (~±7% at 60 Hz rAF release sampling); V4 ran the architecture checklist
 (`src/spec.js` single source of truth, A1-A9); V5 (interaction layer) added T1-T5 (real-mesh label anchors,
 deterministic non-overlapping layout, explicit replay end conditions, static tour end state, colliders for
-participating scene props) and pitfalls 16-17. All still single-case evidence; a second mechanism type
+participating scene props) and pitfalls 16-17. V6 (physics-fidelity round, 2026-10-01) added principles 6-7
+(natural mechanics without guard code; decorative parts visual-follow only), checklist P7 (staged collision
+activation for a projectile overlapping the launcher), T6 (decorative parts never affect launch readouts),
+T7 (compound interactions complete in one pointer session), extended T3 (event-driven replay end condition,
+pitfall 23) and T5 (whole-scene blocking), and pitfalls 21-23. All still single-case evidence; a second mechanism type
 (linkage / stability class) is the planned next pressure test. Not yet built: CV-based sketch extraction,
 overlay fidelity check, UI scaffold. Do not describe planned steps as if they were available.

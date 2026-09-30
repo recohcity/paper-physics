@@ -4,7 +4,7 @@
 
 **An interactive 3D trebuchet simulation that grows from a hand-drawn blueprint into a real-time rigid-body physics model.**
 
-[English](#english) · [中文](#中文)
+![Version](https://img.shields.io/badge/version-0.1.0-blue) [English](#english) · [中文](#中文)
 
 </div>
 
@@ -39,24 +39,36 @@ the in-browser physics engine before the UI was built.
   slow-motion full replay → **build it yourself**. The scrubber lets you jump to any step, and clicking a
   step plays only that step then pauses.
 - **Scene props are physical** — the pencil and the blue-and-white eraser have real static colliders: the
-  ball and blocks collide with them instead of passing through.
+  ball and blocks collide with them instead of passing through. Every object blocks the ball and the
+  blocks (trebuchet, ball stand, pencil, eraser are all solid).
+- **Real winch control mechanism** — a metal ring on the bottom of the throwing arm holds one end of the
+  rope (tip embedded inside the ring, not protruding); a single-rope drum centred on the base holds the
+  other end; hand-crank winches on both drum sides rotate in sync with the arm when cocking (pull down)
+  and when it swings back (release). The rope stays taut and straight the whole time (visual only — it
+  never alters the force and never breaks).
+- **Balance-based loading (natural physics)** — click the cannonball, its stand or the cup to seat the
+  ball in the cup. If ball + beam torque exceeds the counterweight, the beam just tilts cup-down like a
+  scale; you pick the ball/counterweight combination that keeps the beam ready.
+- **Replay loop closes cleanly** — the tour fires, replays the shot in 0.25× slow motion **only from
+  launch to impact** (real speed resumes the instant the ball hits), then resets (ball back on the stand,
+  blocks back in place, DOWN back to 0/10) and hands over to *Build it yourself*.
 - **Dual mode** — *Play the tour* (narrative playback) and *Build it yourself* (full control panel:
-  counterweight 1.40–3.00 kg, ball 0.30–0.60 kg sized to the cup bore, pull angle 0–84.5°, slow motion,
-  Hero/Side/Top views, live SPEED / POWER / RANGE / DOWN readouts in SI units).
+  counterweight 1.40–10.0 kg (default 4.8), ball 0.30–0.60 kg sized to the cup bore, 4:1 lever with a
+  45° max pull, slow motion, Hero/Side/Top/3D views, live SPEED / POWER / RANGE / DOWN readouts in SI units).
 
-### Physics specification (v0.0.3)
+### Physics specification (v0.1.0)
 
 | Parameter | Value | Notes |
 |---|---|---|
 | Scale anchor | 1 scene unit = 1 m | gravity, masses, density, display all derive from it |
-| Arm extent | x ∈ [−0.596, 0.315] m | short arm (pin) at 0.30 m |
-| Counterweight hanger | pin at 0.30, hang 0.10 m | hovering, 20 mm above deck at rest |
-| Counterweight | 1.40 – 3.00 kg (default 2.60) | sand fill follows the slider (full = 3.0 kg) |
+| Arm extent | x ∈ [−0.596, 0.17] m | 4:1 lever: long arm L, short arm = 1/4 L |
+| Counterweight hanger | pin at 0.155 (= 1/4 L), hang 0.10 m | hovering, 20 mm above deck at rest |
+| Counterweight | 1.40 – 10.0 kg (default 4.8) | sand fill follows the slider (full = 10 kg); tour demo 6.0 kg |
 | Ball | 0.30 – 0.60 kg (default 0.45) | diameter = 60% → 80% of the 100 mm cup bore |
 | Blocks | 0.11³ m, 0.30 kg each | wood–wood friction 0.35, damped |
-| Release angle | ~31° (−1.00 rad stop) | geometry-derived, identical every shot |
-| Launch (default) | 3.25 m/s, down ≈ 3/10 in-browser | reference solver 3.30 m/s (cross-check < 3%) |
-| Tour | 8 steps | parts annotations, drag demo, 0.25× replay, BUILD end state |
+| Release angle | ~31° (−1.00 rad stop) | fitted for target hit (deviation from tangent documented) |
+| Launch (default 4.8/0.45) | ≈4.2 m/s at full pull (in-browser) | cw ≥ 4.8 kg is the topple-3rd-layer benchmark |
+| Tour | 8 steps | parts annotations, drag demo, 0.25× launch→impact replay, BUILD end state |
 
 ### Tech stack
 
@@ -140,22 +152,22 @@ demo's fixes has been folded back into the skill's checklist. See
   滑条可跳任意步骤，点热点只播放该步骤后暂停。
 - **道具真实物理**：铅笔与蓝白橡皮擦带真实静态碰撞体，球与方块不再穿透。
 - **双模式**：*Play the tour*（叙事播放）与 *Build it yourself*（自由调校面板：
-  配重 1.40–3.00 kg、球 0.30–0.60 kg 按碗内径比例、拉角 0–84.5°、慢动作、Hero/Side/Top 视角、
-  SPEED / POWER / RANGE / DOWN 实时读数，统一米制）。
+  配重 1.40–10.0 kg（默认 4.8）、球 0.30–0.60 kg 按碗内径比例、4:1 力臂 45° 最大拉角、慢动作、
+  Hero/Side/Top/3D 视角、SPEED / POWER / RANGE / DOWN 实时读数，统一米制）。
 
-### 物理规格（v0.0.3）
+### 物理规格（v0.1.0）
 
 | 参数 | 数值 | 说明 |
 |---|---|---|
 | 尺度锚点 | 1 场景单位 = 1 m | 重力 / 质量 / 密度 / 显示单位统一推导 |
-| 臂范围 | x ∈ [−0.596, 0.315] m | 短臂（销轴）0.30 m |
-| 配重吊挂 | 销轴 0.30、悬吊 0.10 m | 悬停，静止离甲板 20 mm |
-| 配重 | 1.40 – 3.00 kg（默认 2.60） | 透明箱沙量随滑块联动（满箱 = 3.0 kg） |
+| 臂范围 | x ∈ [−0.596, 0.17] m | 4:1 力臂：长臂 L、短臂 = 1/4 L |
+| 配重吊挂 | 销轴 0.155（= 1/4 L）、悬吊 0.10 m | 悬停，静止离甲板 20 mm |
+| 配重 | 1.40 – 10.0 kg（默认 4.8） | 透明箱沙量随滑块联动（满箱 = 10 kg）；tour 演示档 6.0 kg |
 | 球 | 0.30 – 0.60 kg（默认 0.45） | 直径 = 碗内径 100 mm 的 60% → 80% |
 | 方块 | 0.11³ m、0.30 kg/块 | 木-木摩擦 0.35，带阻尼 |
-| 释放角 | ~31°（停止位 −1.00 rad） | 几何决定，每次发射相同 |
-| 默认发射 | 浏览器实测 3.25 m/s、down≈3/10 | 解算器 3.30 m/s（交叉验证 <3%） |
-| Tour | 8 步 | 部件标注、拖拽示意、0.25× 回放、BUILD 终态 |
+| 释放角 | ~31°（停止位 −1.00 rad） | 命中优化标定（偏离几何切线的偏差已文档化） |
+| 默认发射 | 默认 4.8/0.45 满拉约 4.2 m/s（浏览器实测） | 配重 ≥ 4.8 kg 为击倒第 3 层基准 |
+| Tour | 8 步 | 部件标注、拖拽示意、0.25× 发射→碰撞回放、BUILD 终态 |
 
 ### 技术栈
 

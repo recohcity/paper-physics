@@ -139,9 +139,18 @@ export class TrajectoryAnnotations {
       const isBall = full[i].label.name === 'Ball 球';
       const isArm = full[i].label.name === 'Arm 摆杆';
       const isChassis = full[i].label.name === 'Chassis 底座';
+      const isCup = full[i].label.name === 'Cup 投射杯';
+      const isCw = full[i].label.name === 'Counterweight 配重箱';
       // Chassis leader runs down across the wheel: nudge its label to the
       // right (clockwise tilt) so the curve clears the wheel.
       const chassisTilt = isChassis ? Math.PI / 5 : 0;
+      // Cup: rotate the leader clockwise 35° (user directive) so the label
+      // slides along the beam instead of piling on the cup anchor.
+      const cupTilt = isCup ? Math.PI * 35 / 180 : 0;
+      // Counterweight: its label sits horizontally to the RIGHT of the box
+      // (leader points straight back into it) — user directive: curve missed
+      // the box before, needs to sit to the right.
+
       const near = claimedDirs.filter((d) => {
         let dd = Math.abs(d - anchorDirs[i]);
         dd = Math.min(dd, Math.PI * 2 - dd);
@@ -153,8 +162,8 @@ export class TrajectoryAnnotations {
       for (let k = 0; k < 12; k++) {
         // Alternate clockwise/anti-clockwise tilts so a blocked label slides
         // sideways rather than piling directly below the previous one.
-        const angOff = k === 0 ? baseOff + chassisTilt : (k % 2 === 1 ? k * 16 : -(k * 16));
-        g = isBall || isArm ? horizontalRight(full[i], dist) : geomFor(full[i], dist, angOff);
+        const angOff = k === 0 ? baseOff + chassisTilt + cupTilt : (k % 2 === 1 ? k * 16 : -(k * 16));
+        g = isBall || isArm || isCw ? horizontalRight(full[i], dist) : geomFor(full[i], dist, angOff);
         box = textBox(g, widths[i]);
         if (!overlap(box)) break;
         dist += 26;
@@ -268,8 +277,11 @@ export class TrajectoryAnnotations {
     // cup projects outside the view (rest position sits above the Hero frame),
     // the arrow and text are clamped into the visible canvas so the gesture
     // hint always stays on screen.
-    const ax = Math.min(w - 50, Math.max(50, p.x));
-    let ay = p.y - 46 + bob;
+    // Leader target: just to the RIGHT of the cup at bowl height, so the arrow
+    // points into the bowl without crossing the throwing beam above it (the
+    // beam sweeps up-left in Hero view; a vertical arrow from above lands on it).
+    const ax = Math.min(w - 70, Math.max(70, p.x + 52));
+    let ay = p.y - 4 + bob;
     if (ay < 64) ay = 64 + bob;
     const tx = Math.min(w - 110, Math.max(110, p.x));
     const ty = 112; // fixed handwritten banner, clear of the tour banner
@@ -312,6 +324,73 @@ export class TrajectoryAnnotations {
     if (worldPos) {
       this.counterweightPos = worldPos.clone();
     }
+  }
+
+  // Ball weight badge (ball-stand feature): follows the ball wherever it is
+  // (stand while unloaded, cup once loaded).  Shown for 2 s after the BALL
+  // slider moves or on load, mirroring the counterweight callout.
+  setBallWeight(kg, worldPos) {
+    this.ballKg = kg;
+    if (worldPos) {
+      this.ballPos = worldPos.clone();
+    }
+  }
+
+  // Floating badge next to the iron ball, styled like the counterweight one
+  // (glass/parchment + yellow dot) but positioned left so it never overlaps
+  // the counterweight badge on screen.
+  drawBallWeightCallout() {
+    if (!this.ballPos || !this.showBallCallout) return;
+    const p = this.toScreen(this.ballPos);
+    if (!p.visible) return;
+
+    this.ctx.save();
+    const badgeX = p.x - 92;
+    const badgeY = p.y - 18;
+    const badgeW = 76;
+    const badgeH = 26;
+
+    // Connecting pin line from ball to badge
+    this.ctx.strokeStyle = 'rgba(120, 110, 95, 0.85)';
+    this.ctx.lineWidth = 1.4;
+    this.ctx.beginPath();
+    this.ctx.moveTo(p.x, p.y);
+    this.ctx.lineTo(badgeX + badgeW, badgeY + badgeH / 2);
+    this.ctx.stroke();
+
+    // Origin dot on the ball
+    this.ctx.fillStyle = '#222';
+    this.ctx.beginPath();
+    this.ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Glass / Parchment Badge Background
+    this.ctx.fillStyle = 'rgba(252, 250, 246, 0.95)';
+    this.ctx.strokeStyle = 'rgba(205, 195, 180, 0.9)';
+    this.ctx.lineWidth = 1.2;
+    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
+    this.ctx.shadowBlur = 6;
+    this.ctx.shadowOffsetY = 2;
+    this.ctx.beginPath();
+    this.ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+    this.ctx.fill();
+    this.ctx.shadowColor = 'transparent';
+    this.ctx.stroke();
+
+    // Yellow indicator dot
+    this.ctx.fillStyle = '#eab308';
+    this.ctx.beginPath();
+    this.ctx.arc(badgeX + 11, badgeY + badgeH / 2, 3.5, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Weight text
+    this.ctx.fillStyle = '#261f18';
+    this.ctx.font = '600 12.5px "JetBrains Mono", monospace';
+    this.ctx.textAlign = 'left';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.fillText(`${this.ballKg.toFixed(2)} kg`, badgeX + 18, badgeY + badgeH / 2);
+
+    this.ctx.restore();
   }
 
   addPoint(vec3) {
@@ -480,6 +559,9 @@ export class TrajectoryAnnotations {
 
     // 2. Draw Floating Weight Callout Badge next to black counterweight box
     this.drawWeightCallout();
+
+    // 2.5 Ball weight badge (ball-stand feature)
+    this.drawBallWeightCallout();
 
     // 3. Draw Live Flight Path points if recorded
     if (this.points.length >= 2) {

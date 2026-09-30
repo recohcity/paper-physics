@@ -143,3 +143,103 @@ projectile leaves the scene (position beyond the bounds) or its body speed drops
 with a generous timeout as a safety cap — the step then always plays to "the ball disappears". Checklist
 item T3. Keep the final tour step static (reset, no auto-fire, no leftover animation) so it never looks
 like the machine fired itself — checklist item T4.
+
+
+## 18. Validation coverage expires when input ranges change
+
+A verified parameter grid is only evidence for the grid it covered. paper-trebuchet's V2 suite
+(5/5) and sweeps were first run on the audit parameters (cw 0.30-1.00 kg, ball 0.20-0.02 kg);
+after the shipped sliders moved to cw 1.40-3.00 kg and ball 0.30-0.60 kg, that old PASS said
+nothing about the shipped defaults, and the "cw < 1.40 inverts the mechanism" boundary claim had
+no sweep evidence behind it **[code: sweep/xcheck grids pre-dating the range change]**. Fix:
+re-run `sweep_trebuchet.mjs` and `xcheck_suite.mjs` (product-range family) whenever slider ranges
+change, and keep the old grids recorded as regression history. The boundary is now measured:
+cw 1.00/1.20 with ball 0.45 -> NO RELEASE, cw 1.40 -> releases at 1.23 m/s; ball 0.60 + cw 1.40
+(a reachable slider combination) -> NO RELEASE, so the UI lower-left corner is a no-throw zone.
+Checklist items M2/M3 (static balance / energy budget).
+
+
+## 19. User "load" interactions change the mechanism's degrees of freedom — sliders and resets must re-settle
+
+A load/aim interaction that pins the arm (KINEMATIC at rest) must NOT be the only
+degree of freedom: when the player loads the projectile into the cup, the beam has
+to swing freely under the real torque balance (a seesaw) or the "ball too heavy ->
+left-tilted, cannot throw" behaviour cannot exist. paper-trebuchet's ball-stand
+feature adds `unlockBalance()` (arm + counterweight DYNAMIC, cw mask 4|2 so a heavy
+cw settles onto the chassis, hinge equations live, motor off) called on load and on
+every slider change while a ball is loaded **[code: physics.js unlockBalance; main.js
+loadBall/setBallMass/setWeight]**. Two traps: (a) `setBall()` rebuilds the mechanism
+and leaves it locked at rest, so the caller MUST re-call unlockBalance after a
+rebuild when a ball is loaded; (b) the seesaw stop (~45 deg logical lock) keeps the
+beam from embedding into the chassis on the heavy-ball side — that stop is a
+collision behaviour, not a parametrised "cannot fire" gate, so slider ranges stay
+open and the physics decides throwability. Checklist M2 (static balance) covers the
+torque balance check: cw 1.40 vs ball 0.60 is neutral-to-heavy-ball (NO RELEASE per
+the solver) — the reachable UI lower-left corner is a no-throw zone by physics, not
+by guard code.
+
+
+## 20. A logical collision-stopper must never swallow the normal throw arc
+
+A "seesaw-inversion" stop (arm pinned KINEMATIC past ~45 deg so the cup cannot
+embed into the chassis) that fires on the raw condition `DYNAMIC && armAngle > 0.78`
+locks the arm at the release angle on the FIRST frame of every throw — a throw
+releases at +85 deg, which is already past the stop, and the arm is pinned before
+it can swing back. paper-trebuchet hit exactly this: default combos threw fine
+(counterweight torque wins, spin is negative), but the neutral-to-heavy-ball corner
+(cw 1.40 vs ball 0.60 — a precise static-balance point, ~0.03 Nm difference) froze
+at 85 deg and read as "stuck". Fix: give the stop a release grace window (400 ms of
+free swing after `releaseMechanism` — the throw AND the reverse both start there)
+and require cup-ward spin (`angularVelocity.z > 0.05 rad/s`) before locking, so the
+lock only engages when the beam is genuinely being driven toward the chassis.
+The neutral corner is then correct physics: the arm hangs motionless at the balance
+angle (NO RELEASE per the solver) instead of freezing. Checklist M2/M3 (static
+balance / energy budget): verify the stop does not steal energy from the throw arc
+by re-measuring the default combo after any stopper change.
+
+## 21. Decorative mechanism parts must be decoupled from the dynamics (visual-follow, never force-follow)
+
+A demo can add a rope-and-winch control mechanism (rope, drum, hand cranks) for
+storytelling without changing the physics. If the rope body participates in the
+constraint solve, the beam's swing-back gets yanked by the rope length constraint;
+if the rope/drum gets a collider, the projectile or counterweight collides with a
+part that visually "should" give way. paper-trebuchet's winch rope is pure
+visual: rope A-end tip is embedded inside the arm-bottom ring tube (flush, not
+protruding), B-end is embedded in the drum centre; the rope is a Tube whose two
+anchor points are the ring and drum, always taut and straight; drum hand cranks
+rotate by a kinematic mapping of the arm angle (pull-down -> counter-clockwise,
+release -> clockwise, in sync with the arm's angular velocity sign) [code:
+trebuchet.js buildWinch, main.js drag/fire]. The mechanism never transmits force
+and never collides; the throw reads are unchanged by the rope. Rule: classify each
+part as dynamics or decorative; decorative parts get a kinematic mapping (angle ->
+rotation / length), no collider that touches the throw, and a checklist note that
+changing them must not change any launch readout. Checklist item T6.
+
+## 22. A projectile released while overlapping the mechanism gets solver-pinned to zero velocity
+
+When the ball sits in the cup at release, its sphere overlaps the cup/beam
+colliders for the first solver steps. At normal step sizes the contact solver
+pushes it out cleanly; under slow motion the physics delta shrinks but the overlap
+may persist long enough that the solver clamps the ball's velocity to ~0, so the
+replay then settles in ~12 ms and the slow-mo replay instantly ends
+[code + measured: paper-trebuchet replay, 0.25x]. paper-trebuchet's fix:
+releaseBall() activates collisions in stages, at release the ball's mask
+excludes the mechanism group (chassis|frame|wheels|winch, 2|32|64) so it only
+touches target blocks + table (1|4), and restores the full mask after 600 ms
+[code: physics.js releaseBall]. Rule: any projectile that starts overlapping a
+rigid launcher needs staged collision activation; verify under the slowest
+supported time scale, not just at 1x. Checklist item P7.
+
+## 23. A rolling projectile may never settle — event-driven end conditions beat velocity thresholds
+
+Polling "end when speed < 0.06" works for a ball that comes to rest, but a
+low-friction ball rolls across the table at ~0.08 m/s for 20+ s (contact damping
+decays the velocity asymptotically), so the settled threshold never trips and the
+replay hangs until the safety timeout [code + measured]. paper-trebuchet's
+fix keeps the poll loop but adds an event-driven cap: the first real impact
+(_impactMomentum > 0, set by the collide listener) starts a 5 s post-impact
+timer, and the replay resolves on impact-time + 5 s regardless of the ball still
+rolling, since the toppling blocks have finished by then. Rule: after the primary
+impact event, cap the tail with a fixed wall-clock window (blocks finish toppling
+in a few seconds); the generic timeout stays as the last-resort safety. Checklist
+item T3 (extends pitfall 17).

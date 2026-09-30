@@ -140,6 +140,31 @@ export function drawTrebuchetPencilSketch(ctx, tx, ty, helpers) {
   ctx.arc(tx - 215, ty - 365, 20, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+
+  // Rope (lashing): from mid-beam down to the hand-crank winch drum on the
+  // chassis front (sketch mirror of the real rope+winch assembly)
+  drawPencilLine(tx - 105, ty - 255, tx - 88, ty + 78, 3);   // long drop
+  drawPencilLine(tx - 88, ty + 78, tx - 30, ty + 78, 3);    // drum top edge
+  drawPencilCircle(tx - 88, ty + 88, 14);                    // winch drum (side)
+  drawPencilCircle(tx - 100, ty + 88, 4);                    // crank hub dot
+
+  // Ball stand (two-deck tray + iron ball) lower-left of the sketch
+  drawPencilLine(tx - 330, ty + 150, tx - 170, ty + 150, 5); // base top
+  drawPencilLine(tx - 330, ty + 165, tx - 170, ty + 165, 4); // base bottom
+  drawPencilLine(tx - 330, ty + 150, tx - 330, ty + 165, 4);
+  drawPencilLine(tx - 170, ty + 150, tx - 170, ty + 165, 4);
+  drawPencilLine(tx - 300, ty + 130, tx - 200, ty + 130, 4); // tray top
+  drawPencilLine(tx - 300, ty + 140, tx - 200, ty + 140, 3); // tray bottom
+  drawPencilLine(tx - 300, ty + 130, tx - 300, ty + 140, 3);
+  drawPencilLine(tx - 200, ty + 130, tx - 200, ty + 140, 3);
+  drawPencilLine(tx - 290, ty + 150, tx - 290, ty + 140, 3); // stem left
+  drawPencilLine(tx - 210, ty + 150, tx - 210, ty + 140, 3); // stem right
+  drawPencilCircle(tx - 250, ty + 118, 15);                  // iron ball in tray
+  ctx.fillStyle = 'rgba(75, 70, 65, 0.85)';
+  ctx.beginPath();
+  ctx.arc(tx - 250, ty + 118, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
   ctx.restore();
 }
 

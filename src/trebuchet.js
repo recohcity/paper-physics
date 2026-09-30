@@ -130,12 +130,10 @@ export class TrebuchetModel {
     // clears the deck by ≥10 mm.  => apexY - 0.476 = 0.10 + 0.020 => 0.5964.
     this.apexY = GEOM.apexY; // spec.js (hover: box bottom 20 mm above deck top)
 
-    // REST_ANGLE (pull 0°):
-    // Short arm is angled down towards chassis floor.
-    // The counterweight rests cleanly on the chassis floor between the front wheels.
-    // Long arm is tilted up-left at ~50° to horizontal.
-    this.REST_ANGLE = GEOM.REST_ANGLE; // ~ -57.3° stop; releases the ball at ~31° (flatter,
-    // side-ways hit on the pyramid — physics-calibrated, see mech2d sweep)
+    // REST_ANGLE (pull 0°): the beam hangs VERTICAL, counterweight at the lowest point,
+    // cup at the top. Release fires AT this angle (ball leaves the cup level, trajectory
+    // is a flat parabola) — real-trebuchet behaviour, user 2026-09-29.
+    this.REST_ANGLE = GEOM.REST_ANGLE; // -90° vertical (spec.js)
 
     // Cup & 3D wooden cradle dimensions
     this.cupR = GEOM.cupR; // == MECH.cup_ri — spec.js
@@ -144,9 +142,10 @@ export class TrebuchetModel {
     this.cupCenterX = GEOM.cupCenterX; // derived -LONG_ARM - cupR + 0.02 — spec.js
     this.cupCenterY = 0.021;
 
-    // Physical ground limit: cradle bottom touches paper surface at Y = 0.006.
-    // Analytical solution: ~84.58°. Capped at 84.5° so the spoon rests on paper without penetration.
-    this.maxPullDeg = 84.5;
+    // Down-pull limit (real-cock stop): beam pulled 135° from vertical -> 45° from the
+    // mast (max energy, user 2026-09-29). Cradle bottom stays ~8 cm above the paper at
+    // this pose, so no penetration.
+    this.maxPullDeg = 135;
 
     this.buildChassis();
     this.buildArm();
@@ -154,6 +153,9 @@ export class TrebuchetModel {
     this.group.add(this.chassis);
     this.group.add(this.armPivot);
     this.scene.add(this.group);
+
+    this.buildWinch();
+    this.buildRope();
 
     // Save original materials for smooth morph transitions
     this.group.traverse((obj) => {
@@ -637,7 +639,7 @@ export class TrebuchetModel {
     });
 
     // Transparent counterweight box.  Its dimensions stay fixed; the mass is
-    // represented by the sand fill inside it (full box = 3.0 kg, spec.js UI.counterweight.max).
+    // represented by the sand fill inside it (full box = 10 kg, spec.js UI.counterweight.max).
     const cwSize = GEOM.cwSize;
     const cwGeom = new THREE.BoxGeometry(cwSize, cwSize, cwSize);
     this.counterweightMesh = new THREE.Mesh(cwGeom, this.clearBoxMat);
@@ -698,10 +700,10 @@ export class TrebuchetModel {
     this.armPivot.add(this.cwGroup);
   }
 
-  // Full sand box = slider max (3.0 kg).  Only the sand level changes with
+  // Full sand box = slider max (4.0 kg).  Only the sand level changes with
   // the selected mass; the transparent box and its hanger remain fixed.
   setCounterweight(kg) {
-    const fullMassKg = 3.0;
+    const fullMassKg = 10; // sand full = slider max (10 kg, user:2026-09-30)
     const fillRatio = THREE.MathUtils.clamp(kg / fullMassKg, 0, 1);
     if (this.sandMesh) {
       const cwSize = GEOM.cwSize;
@@ -731,6 +733,199 @@ export class TrebuchetModel {
     const clampedDeg = Math.min(this.maxPullDeg, Math.max(0, pullDeg));
     const pullRad = THREE.MathUtils.degToRad(clampedDeg);
     this.setArmAngle(this.REST_ANGLE + pullRad);
+    this.winchPose(clampedDeg);
+  }
+
+  // ---- Real-cock control: hand-crank winch fixed on the chassis + hanger ring + rope (user 2026-09-30) ----
+  // The winch is bolted onto the LEFT of the chassis deck (not beside the wheels):
+  // wooden base plate, two side plates with VISIBLE bearings (bright) and bearing
+  // bushings (dark), a rope drum, and a hand-crank wheel with 4 radial handles on
+  // each side (reference: user's capstan/wheel drawing).  One rope end is wrapped on
+  // the drum, the other ties to a SMALL metal ring fixed under the beam (not under
+  // the cup).  Pulling the beam down winds the drum (anti-clockwise) and shortens the
+  // rope; on release the drum unwinds (clockwise) as the beam rebounds.
+  buildWinch() {
+    const bm = this.metalPinMat;   // bright metal: bearings, spokes
+    const dm = this.darkMetalMat;  // dark metal: bearing bushings, caps
+    const w = this.woodMat;
+    const gripMat = this.paperMat; // light-cream handle grips (reference drawing)
+
+    this.winchGroup = new THREE.Group();
+    // fixed ON the chassis deck (deck top y=0.10), horizontally centered (z=0) so it
+    // sits in the arm's vertical plane, directly under the beam
+    this.winchGroup.position.set(-0.27, 0.10, 0);
+
+    // wooden base plate bolted to the deck
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.012, 0.070), w);
+    plate.position.set(0, 0.006, 0);
+    this.winchGroup.add(plate);
+
+    // two side plates (support walls) with the axle passing through
+    for (const dz of [-0.034, 0.034]) {
+      const side = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.080, 0.007), dm);
+      side.position.set(0, 0.046, dz);
+      this.winchGroup.add(side);
+    }
+
+    // drum assembly: drum + bearings + bushings + rope coils + BOTH crank wheels
+    this.drumGroup = new THREE.Group();
+    this.drumGroup.position.set(0, 0.056, 0);
+
+    // rope drum (wood core, slightly recessed between the bearings)
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.048, 24), w);
+    drum.rotation.x = Math.PI / 2;
+    this.drumGroup.add(drum);
+
+    // visible bearings: bright-metal rings where the axle exits the drum ends
+    for (const dz of [-0.025, 0.025]) {
+      const brg = new THREE.Mesh(new THREE.CylinderGeometry(0.0115, 0.0115, 0.014, 18), bm);
+      brg.rotation.x = Math.PI / 2;
+      brg.position.set(0, 0, dz);
+      this.drumGroup.add(brg);
+    }
+    // bearing bushings: dark-metal rings holding the bearings against the side plates
+    for (const dz of [-0.037, 0.037]) {
+      const bushing = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.006, 18), dm);
+      bushing.rotation.x = Math.PI / 2;
+      bushing.position.set(0, 0, dz);
+      this.drumGroup.add(bushing);
+    }
+
+    // rope coils wrapped on the drum (spiral, follows the drum)
+    const coilPts = [];
+    const turns = 5, rCoil = 0.016; // full tight wraps: 5 turns x rope pitch 0.0084 = 0.042
+    for (let i = 0; i <= 90; i++) {
+      const t = i / 90;
+      const a = t * Math.PI * 2 * turns;
+      coilPts.push(new THREE.Vector3(rCoil * Math.cos(a), rCoil * Math.sin(a), -0.021 + t * 0.042));
+    }
+    this.winchCoil = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coilPts), 180, 0.004, 8, false),
+      new THREE.MeshStandardMaterial({ color: 0x9a6a3a, roughness: 0.9 })
+    );
+    this.drumGroup.add(this.winchCoil);
+
+    // hand-crank wheels on BOTH ends (reference drawing: wheel + 4 radial handles + cream grips)
+    for (const side of [-1, 1]) {
+      const crank = new THREE.Group();
+      crank.position.set(0, 0, side * 0.052);
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.005, 24), w);
+      wheel.rotation.x = Math.PI / 2;
+      crank.add(wheel);
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 2;
+        const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.046, 10), bm);
+        spoke.rotation.z = a;
+        spoke.position.set(0.023 * Math.cos(a), 0.023 * Math.sin(a), 0);
+        crank.add(spoke);
+        const grip = new THREE.Mesh(new THREE.SphereGeometry(0.0065, 10, 10), gripMat);
+        grip.position.set(0.023 * Math.cos(a), 0.023 * Math.sin(a), 0.011);
+        crank.add(grip);
+      }
+      this.drumGroup.add(crank);
+    }
+
+    this.winchGroup.add(this.drumGroup);
+    this.winchGroup.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
+    this.group.add(this.winchGroup);
+  }
+
+  // Small metal ring fixed UNDER the beam (not the cup); rope diameter = beam width/5
+  buildRope() {
+    const bm = this.metalPinMat;
+    const dm = this.darkMetalMat;
+    // Ring + connecting bolt fixed under the beam (beam bottom y=-0.021 in armPivot
+    // space).  A stud screws up through the beam underside, a hex nut presses it
+    // against the beam, and the ring hangs below with its inner hole (0.009) sized
+    // for the rope diameter (0.0084).
+    this.ringStud = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.010, 12), bm);
+    this.ringStud.position.set(-0.50, -0.026, 0); // stud from beam bottom -0.021 down to -0.031
+    this.armPivot.add(this.ringStud);
+    this.ringNut = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.004, 6), dm); // hex nut
+    this.ringNut.position.set(-0.50, -0.023, 0); // pressed against the beam underside
+    this.armPivot.add(this.ringNut);
+    // VERTICAL ring (default torus lies in the XY plane -> hole faces z) hanging on the
+    // stud like a shackle.  Ring tube Ø0.010 > rope Ø0.007: the rope END embeds
+    // in the ring (no threading, no knot) and is locked to the ring anchor.
+    this.ringMesh = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.005, 12, 24), bm);
+    this.ringMesh.position.set(-0.50, -0.042, 0); // ring top -0.037 meets stud bottom -0.031
+    this.armPivot.add(this.ringMesh);
+
+    // rope: diameter = beam width/5 = 0.042/5 ≈ 0.0084 (radius 0.0042); 16 segments +
+    // dark coffee brown for clear contrast against the light wood
+    // rope visual: TubeGeometry rebuilt every frame from the PHYSICS rope nodes
+    // (Cannon node chain, see physics.buildRope).  Material matches the rope.
+    this.ropeMat = new THREE.MeshStandardMaterial({ color: 0x9a6a3a, roughness: 0.9 });
+    this.ropeMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.ropeMat);
+    this.ropeMesh.frustumCulled = false;
+    this.scene.add(this.ropeMesh);
+    this.ropeMidpoint = new THREE.Vector3();
+    this._ringWorld = new THREE.Vector3();
+    this._winchWorld = new THREE.Vector3();
+    this._mainPts = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    this._winchWorld = new THREE.Vector3();
+    this._upVec = new THREE.Vector3(0, 1, 0);
+    this._ropeDir = new THREE.Vector3();
+  }
+
+  // Pull-coupled winch pose: drum + coils + crank wheels spin (anti-clockwise while
+  // cocking), rope tube follows the ring under the beam.
+  winchPose(pullDeg) {
+    if (!this.drumGroup || !this.ropeMesh) return;
+    // Drum/crank spin is driven from this.armAngle inside ropeUpdate() every
+    // frame, so it covers BOTH the manual pull and the free rebound after
+    // release (armAngle follows the physics each frame).
+    this.ropeUpdate();
+  }
+
+  // Rope follows the ring under the beam EVERY frame, so it stays visible while
+  // being pulled (shortens) and while the arm rebounds after release (lengthens).
+  ropeUpdate() {
+    if (!this.ropeMesh || !this.drumGroup || !this.ringMesh) return;
+    // Drum + crank wheels spin with the CURRENT arm rotation every frame.  We
+    // read armPivot.rotation.z (not this.armAngle): the pivot rotation is kept
+    // in sync by every driver — setPullAngle while dragging, physics sync while
+    // the loaded ball swings freely, and updateMechanism during the firing
+    // rebound — whereas this.armAngle only updates on setArmAngle (drag).
+    // So the drum follows the arm through drag AND rebound and stops exactly
+    // when the arm is vertical again.  2.2 rad per 100° of pull (unchanged).
+    const spin = (this.armPivot.rotation.z + 1.571) * 2.2;
+    this.drumGroup.rotation.z = -spin;
+    const ph = this.physics;
+    if (!ph || !ph.ringWorldForRope) return;
+    ph.ringWorldForRope(this._ringWorld);            // ring centre world pos
+    this.winchGroup.getWorldPosition(this._winchWorld);
+    // winchGroup origin -> drum centre: drumGroup sits at local (0, 0.056, 0)
+    // inside winchGroup, so the rope must anchor to the DRUM, not the group
+    // origin (the origin is below the drum and leaves the rope end floating).
+    this._winchWorld.y += 0.056;
+    const w = this._winchWorld, r = this._ringWorld;
+    // STRAIGHT taut rope with EXACTLY TWO ends (user directive):
+    //   A end = buried INSIDE the ring tube wall — rope outer surface flush
+    //           with the tube outer wall (R+tube = 0.018), nothing protrudes.
+    //   B end = buried in the drum cylinder wall — rope outer surface flush
+    //           with the drum outer surface (drum radius 0.016), nothing
+    //           protrudes past the drum.
+    // One taut line, no bow/sag/sway; length stretches with the beam pose.
+    const d = Math.hypot(w.x - r.x, w.y - r.y, w.z - r.z) || 1e-4;
+    const ux = (w.x - r.x) / d, uy = (w.y - r.y) / d, uz = (w.z - r.z) / d;
+    const tipA = 0.018 - 0.0035; // ring tube outer surface, one rope radius in
+    this._mainPts[0].set(r.x + ux * tipA, r.y + uy * tipA, r.z + uz * tipA);
+    const tipB = 0.016 - 0.0035; // drum outer surface, one rope radius in
+    this._mainPts[1].set(w.x - ux * tipB, w.y - uy * tipB, w.z - uz * tipB);
+    // LineCurve3: a mathematically exact STRAIGHT line between the two ends
+    // (CatmullRom with an extra unused point in the pool caused a kink).
+    this.ropeMidpoint.set(
+      (this._mainPts[0].x + this._mainPts[1].x) / 2,
+      (this._mainPts[0].y + this._mainPts[1].y) / 2,
+      (this._mainPts[0].z + this._mainPts[1].z) / 2
+    );
+    const cm = new THREE.LineCurve3(this._mainPts[0], this._mainPts[1]);
+    this.ropeMesh.geometry.dispose();
+    this.ropeMesh.geometry = new THREE.TubeGeometry(cm, 8, 0.0035, 8, false);
+    this.ropeMesh.position.set(0, 0, 0);
+    this.ropeMesh.quaternion.identity();
+    this.ropeMesh.scale.set(1, 1, 1);
   }
 
   // Get world position of the cup
@@ -812,6 +1007,13 @@ export class TrebuchetModel {
           }
         });
       }
+    }
+    // Rope lives at scene level (not inside group), so drive its material
+    // through the same morph stages manually.
+    if (this.ropeMesh && this.ropeMat) {
+      if (f <= 0.33) this.ropeMesh.material = this.paperMat;
+      else if (f <= 0.66) this.ropeMesh.material = this.blendMat;
+      else this.ropeMesh.material = this.ropeMat;
     }
   }
 }

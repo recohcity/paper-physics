@@ -7,11 +7,15 @@ import { MECH, UI } from './spec.js';
 // SCALE ANCHOR: 1 scene unit = 1 m (single source of truth; audit F3).
 // Gravity (9.82), masses (kg), densities (kg/m³) and mm display all derive
 // from it.  All mechanism numbers (arm x ∈ [-0.596, 0.315], rest angle -1.00,
-// apexY 0.5964 hover geometry, counterweight slider 1.40-3.00, ball slider
+// apexY 0.5964 hover geometry, counterweight slider 1.40-4.00, ball slider
 // 0.30-0.60) live in src/spec.js — mirrors skill sketch2sim spec.json.
-// The 1.4 kg counterweight lower bound keeps every slider combination free of
-// static inversion (mech2d sweep, see audit F2/M2).  Browser-verified baseline:
-// default 2.6 kg x 0.45 kg -> 3.53 m/s / 31° / down 1-4 (see CHANGELOG 0.1.3).
+// Lower bound 1.40 kg keeps the released arm from inverting (mech2d sweep);
+// below it the throw stalls.  The upper bound is open to 4.00 kg; a heavier
+// BALL than counterweight is a normal seesaw — the arm simply settles cup-
+// down and is stopped by the paper (mask 4) / chassis limiter (group 8),
+// never by clamping the sliders (see pitfall #18 re-run note).  Browser-
+// verified baseline: default 2.6 kg x 0.45 kg -> 3.53 m/s / 31° / down 1-4
+// (see CHANGELOG 0.1.3).
 // ---------------------------------------------------------------------------
 
 export class PhysicsWorld {
@@ -24,7 +28,7 @@ export class PhysicsWorld {
     // speed matches mech2d/Cannon-es to <1.5%.  Impact-momentum transfer was
     // measured separately: a 0.10 kg ball at 3.3 m/s knocks the 0.14 kg blocks
     // over with the default solver budget (see cannon-xcheck/collision_test.mjs).
-    this.world.solver.iterations = 50;
+    this.world.solver.iterations = 80;   // rope P2P chain shares the budget (was 50)
     this.world.solver.tolerance = 1e-7;
 
     // Contact Materials
@@ -86,6 +90,84 @@ export class PhysicsWorld {
     this.world.addBody(deckBody);
     this._deckBody = deckBody; // saved for the cw collide listener (F.1)
 
+    // Chassis arm-limiter (REAL collision for the lever, pitfall #18 follow-up):
+    // the arm body used to be mask 0 (never collides), so when the ball outweighs
+    // the counterweight (seesaw inversion) the beam swung straight through the
+    // chassis deck.  This static plate sits on the deck top face (y=0.09) and the
+    // arm mask includes its group (8).  Right edge = A-frame front foot (world
+    // x=-0.48): the cup's whole seesaw-settle arc (x -0.36..-0.01) lies to the
+    // RIGHT of it, so an inverted arm swings free past the chassis and stops on
+    // the paper (mask 4) — the cup never overlaps the deck.  The plate only
+    // catches the beam if the inversion goes past vertical.  Dedicated group 8:
+    // counterweight (mask 4|2), ball/blocks/props (mask 0xffffffff but plate
+    // mask=2 excludes group 1) are unaffected.
+    const armLimiter = new CANNON.Body({ type: CANNON.Body.STATIC });
+    armLimiter.addShape(new CANNON.Box(new CANNON.Vec3(0.295, 0.015, 0.10)),
+                        new CANNON.Vec3(0, 0, 0));
+    armLimiter.position.set(-0.775, 0.09, 0); // x in [-1.07, -0.48]
+    armLimiter.collisionFilterGroup = 8;
+    armLimiter.collisionFilterMask = 2; // only the arm beam
+    this.world.addBody(armLimiter);
+    this._armLimiter = armLimiter;
+
+    // Chassis + A-frame collision bodies (ball-blocker, 2026-09-30): the
+    // projectile used to fly straight through the trebuchet when it bounced
+    // back, because only the cw-landing deck (mask 4) and the arm-limiter
+    // (mask 8) had bodies and neither collided with group 1 (ball/blocks).
+    // Add a full chassis box + two A-frame side plates, group 1, so the
+    // machine physically stops the ball (and the blocks) like real wood.
+    // The trebuchet recoils (chassis x shifts ±~0.03), so their x is synced
+    // every frame to trebuchet.group.position.x via syncChassis().
+    this._chassisBodies = [];
+    const woodMat = this.materials?.woodMaterial || groundMaterial;
+    const chassisBox = new CANNON.Body({ type: CANNON.Body.STATIC, material: woodMat });
+    chassisBox.addShape(new CANNON.Box(new CANNON.Vec3(0.38, 0.035, 0.145)),
+                        new CANNON.Vec3(0, 0.065, 0)); // chassis x [-0.38,0.38] rel apex
+    chassisBox.position.set(-0.72, 0, 0);
+    chassisBox.collisionFilterGroup = 64;
+    chassisBox.collisionFilterMask = 0xffffffff;
+    chassisBox._relX = 0; // chassis is group-local x=0 -> world x = groupX
+    this.world.addBody(chassisBox);
+    this._chassisBodies.push(chassisBox);
+    // Two A-frame side plates (covers rear/front slanted legs + centre post at
+    // z ±0.125; kept off z=0 so the hanging counterweight and beam are untouched).
+    [-0.125, 0.125].forEach((z) => {
+      const frame = new CANNON.Body({ type: CANNON.Body.STATIC, material: woodMat });
+      frame.addShape(new CANNON.Box(new CANNON.Vec3(0.275, 0.25, 0.015)),
+                     new CANNON.Vec3(0.02, 0.33, z)); // frame x [-0.675,0.295]? no — rel apex x
+      frame.position.set(-0.72, 0, 0);
+      frame.collisionFilterGroup = 64;
+      frame.collisionFilterMask = 0xffffffff;
+      frame._relX = 0; // A-frame is also group-local x=0 (legs span x[-0.92,0.24])
+      this.world.addBody(frame);
+      this._chassisBodies.push(frame);
+    });
+    // Four wheels (group-local x ±0.22, z ±0.205, axle y 0.065): a ball
+    // rolling into a wheel must be stopped, not pass through it.
+    [-0.22, 0.22].forEach((wx) => {
+      [-0.205, 0.205].forEach((wz) => {
+        const wheel = new CANNON.Body({ type: CANNON.Body.STATIC, material: woodMat });
+        wheel.addShape(new CANNON.Box(new CANNON.Vec3(0.06, 0.065, 0.014)),
+                       new CANNON.Vec3(wx, 0.065, wz));
+        wheel.position.set(-0.72, 0, 0);
+        wheel.collisionFilterGroup = 64;
+        wheel.collisionFilterMask = 0xffffffff;
+        wheel._relX = wx; // world x = groupX + wx
+        this.world.addBody(wheel);
+        this._chassisBodies.push(wheel);
+      });
+    });
+    // Winch (rope drum + crank wheels), group-local (-0.27, 0.10, 0).
+    const winch = new CANNON.Body({ type: CANNON.Body.STATIC, material: woodMat });
+    winch.addShape(new CANNON.Box(new CANNON.Vec3(0.06, 0.03, 0.04)),
+                   new CANNON.Vec3(-0.27, 0.13, 0));
+    winch.position.set(-0.72, 0, 0);
+    winch.collisionFilterGroup = 64;
+    winch.collisionFilterMask = 0xffffffff;
+    winch._relX = -0.27;
+    this.world.addBody(winch);
+    this._chassisBodies.push(winch);
+
     this.onBlockHit = null;
     this.onBallLand = null;
 
@@ -102,6 +184,33 @@ export class PhysicsWorld {
     this._mechCwBox = MECH.box;
     this.ballKg = 0.45;      // projectile, adjustable via BALL slider
     this.ballRadius = 0.03;  // 0.45 kg -> 60% of bowl opening (see setBall)
+  }
+
+  // Sync chassis/frame colliders with the 3D group (recoil).  Call every
+  // frame with trebuchet.group.position.x.
+  syncChassis(groupX) {
+    if (!this._chassisBodies) return;
+    for (const b of this._chassisBodies) b.position.x = groupX + b._relX;
+  }
+
+  // Ball-stand collider: the two-tier wooden rack (base+tray at the paper's
+  // lower-left) was invisible to physics, so a rolled/landed ball slid through
+  // it.  Add one static box over the tray; group 64 (same as chassis/frame) so
+  // it blocks the ball (group 1, mask 0xffffffff once released) but never
+  // touches the arm/counterweight.  Stand is fixed on the paper (does NOT
+  // recoil with the trebuchet group), so it is kept out of _chassisBodies.
+  addBallStandCollider(x, z) {
+    if (this._standCollider) return;
+    const woodMat = this.materials?.woodMaterial || groundMaterial;
+    const stand = new CANNON.Body({ type: CANNON.Body.STATIC, material: woodMat });
+    // Tray 0.12 square, y 0.017..0.047 (base 0.006..0.020 + tray 0.020..0.046).
+    stand.addShape(new CANNON.Box(new CANNON.Vec3(0.055, 0.015, 0.055)),
+                   new CANNON.Vec3(0, 0.032, 0));
+    stand.position.set(x, 0, z);
+    stand.collisionFilterGroup = 64;
+    stand.collisionFilterMask = 0xffffffff;
+    this.world.addBody(stand);
+    this._standCollider = stand;
   }
 
   // -------------------------------------------------------------------------
@@ -149,12 +258,19 @@ export class PhysicsWorld {
     const armBody = new CANNON.Body({ mass: M, type: CANNON.Body.DYNAMIC });
     armBody.addShape(new CANNON.Box(new CANNON.Vec3((x2 - x1) / 2, ty / 2, dz / 2)),
                      new CANNON.Vec3(-cx, -cy, 0));
-    armBody.addShape(new CANNON.Sphere(ball_r), this._mechBallLocal);
-    armBody.collisionFilterGroup = 2; armBody.collisionFilterMask = 0; // never collides
+    // mask 4 (paper, group 4) + 8 (chassis arm-limiter, group 8): the arm now
+    // really collides.  It must NOT collide with the counterweight (group 2,
+    // hinge-connected) or ball/blocks/props (group 1) — 4|8 contains none of
+    // those, so the throw path and the block physics are untouched.  The paper
+    // contact is the physical bottom limit of the downward pull (cradle-bottom
+    // touches paper at ~84.5°); the limiter plate is the seesaw-inversion stop.
+    armBody.collisionFilterGroup = 2 | 32; armBody.collisionFilterMask = 4 | 8 | 1;
     this._applyInertia(armBody, this._mechIcm);
     this.world.addBody(armBody);
     this.mechArmBody = armBody;
-
+    // Ring anchor (where the rope ties) in CoM-local space: visual ring sits at
+    // armPivot-local (-0.50, -0.042, 0); armPivot x=armCx maps to CoM x=-cx.
+    this._ringLocalCoM = new CANNON.Vec3(-0.50 - armCx - cx, -0.042 - cy, 0);
     // Counterweight body — origin at box centre; hangs Lc below the arm pin.
     // Collides ONLY with the table (group 4): during flight the counterweight
     // must swing free (mask 0, set again in releaseMechanism); after the arm
@@ -162,7 +278,7 @@ export class PhysicsWorld {
     const cwBody = new CANNON.Body({ mass: this._mechCwMass, type: CANNON.Body.DYNAMIC,
                                      linearDamping: 0.05, angularDamping: 0.30 });
     cwBody.addShape(new CANNON.Box(new CANNON.Vec3(box / 2, box / 2, box / 2)));
-    cwBody.collisionFilterGroup = 2; cwBody.collisionFilterMask = 4;
+    cwBody.collisionFilterGroup = 2; cwBody.collisionFilterMask = 4 | 1;
     this.world.addBody(cwBody);
     this.mechCwBody = cwBody;
 
@@ -194,6 +310,34 @@ export class PhysicsWorld {
 
     this.setCwMass(this._mechCwMass);
     this.setCocked(0);
+  }
+
+  // -------------------------------------------------------------------------
+  // Physical rope (user 2026-09-30: Cannon node chain + ring collision).
+  // The rope is a chain of light spheres tied with PointToPoint constraints;
+  // node0 is LOCKED to the arm body at the ring anchor, the last node is LOCKED
+  // to the winch anchor on the chassis.  Ring collision boxes (group 32) on the
+  // arm keep the rope from passing through the ring tube while leaving the hole
+  // open, so the rope threads through it.  Rope is purely decorative-mechanical:
+  // the throw is still hinge-driven; this adds the visual constraint that the
+  // rope cannot break or slip off.
+  // -------------------------------------------------------------------------
+  buildRope() {
+    // 2026-09-30 user solution: no threading, no knotting.  The ring tube is
+    // thicker than the rope (tube Ø 0.010 > rope Ø 0.007), so the rope end is
+    // EMBEDDED in the ring and locked to the ring anchor on the arm.  The
+    // visual rope terminates at the ring centre (ringWorldForRope); nothing
+    // sticks out past the ring.  No physics nodes, no constraints - the rope
+    // end is fixed to the ring, and the rope itself transfers no force (the
+    // throw is hinge-driven).
+  }
+
+  // World position of the ring hole for the long visual rope (winch -> ring).
+  ringWorldForRope(out) {
+    const r = this._ringLocalCoM;
+    const w = this.mechArmBody.pointToWorldFrame(r);
+    out.x = w.x; out.y = w.y; out.z = w.z;
+    return out;
   }
 
   // Set the z-axis inertia by hand. cannon-es approximates inertia from shape
@@ -320,6 +464,7 @@ export class PhysicsWorld {
     this.mechCwBody.wakeUp();
     this.mechCwBody.collisionFilterMask = 0; // free swing until the stop
     this._cwSettle = false; // never settle-ease while the arm swings
+    this._releaseFreeMs = 400; // free-swing window: throw AND reverse both swing freely first
     // Re-hang the counterweight: the box stays on the live hinge throughout
     // (hover mode never slacks the hanger), but the next shot must still
     // re-assert the hinge equations — DO NOT call this._cwHinge.enable()
@@ -345,6 +490,30 @@ export class PhysicsWorld {
     this._applyInertia(this.mechCwBody, this._mechCwMass * this._mechCwBox ** 2 / 6);
   }
 
+  // Loaded-ball balance (ball-stand feature): after the player clicks the
+  // ball into the cup the beam must swing freely under the REAL torque
+  // balance — a seesaw, not a pinned arm.  Same as releaseMechanism but the
+  // counterweight keeps its deck/table mask (4|2) so a heavy counterweight
+  // settles onto the chassis naturally, and a heavy ball tips the beam
+  // cup-down until step()'s logical ~45° stop ("left-tilted, cannot throw").
+  unlockBalance() {
+    if (!this.mechArmBody) return;
+    this.mechArmBody.type = CANNON.Body.DYNAMIC;
+    this.mechCwBody.type = CANNON.Body.DYNAMIC;
+    this.mechArmBody.wakeUp();
+    this.mechCwBody.wakeUp();
+    this.mechCwBody.collisionFilterMask = 4 | 2 | 1; // settles on deck (2) / table (4)
+    this._cwSettle = false;
+    if (this._cwHinge) {
+      for (let i = 0; i < 5; i++) this._cwHinge.equations[i].enabled = true;
+      this._cwHinge.motorEquation.enabled = false;
+    }
+    this.mechCwBody.linearDamping = 0.05;
+    this.mechCwBody.angularDamping = 0.30;
+    this._applyInertia(this.mechArmBody, this._mechIcm);
+    this._applyInertia(this.mechCwBody, this._mechCwMass * this._mechCwBox ** 2 / 6);
+  }
+
   // After release: pin the arm at the stop angle.  The counterweight is NOT
   // teleported back to vertical — it stays dynamic, keeps swinging on the
   // hinge and falls onto the chassis deck (collision group 2) or the table
@@ -352,6 +521,7 @@ export class PhysicsWorld {
   // scripted.  Mask 4|2: the landing base ("0 point") is the chassis deck.
   lockMechanism() {
     if (!this.mechArmBody) return;
+        this._releaseFreeMs = 0; // balance stops engage immediately
     this.mechArmBody.type = CANNON.Body.KINEMATIC;
     this.mechArmBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), this._mechRestAngle);
     const rot = this.mechArmBody.quaternion.vmult(this._mechRCom);
@@ -359,7 +529,7 @@ export class PhysicsWorld {
     this.mechArmBody.velocity.set(0, 0, 0);
     this.mechArmBody.angularVelocity.set(0, 0, 0);
     this.mechCwBody.type = CANNON.Body.DYNAMIC;
-    this.mechCwBody.collisionFilterMask = 4 | 2; // table (4) + chassis deck (2) — safety net only
+    this.mechCwBody.collisionFilterMask = 4 | 2 | 1; // table (4) + chassis deck (2) — safety net only
     this._cwSettle = true; // settle-ease the box back to its vertical hang
     // Post-lock angular damping: kills the residual +/-51 deg pendulum swing
     // that survives the stop.  cannon-es uses angularVelocity *= (1-d)^dt, so d
@@ -504,13 +674,22 @@ export class PhysicsWorld {
     }
   }
 
-  createProjectile(scene) {
+  // Drop the projectile from the world/scene.  Called before every launch:
+  // a stale ball body resting among the blocks would shove the woken pile on
+  // the next fire (the "invisible impact" bug) — the fresh shot rebuilds it.
+  removeProjectile(scene) {
     if (this.ballBody) {
       this.world.removeBody(this.ballBody);
+      this.ballBody = null;
     }
     if (this.ballMesh) {
-      scene.remove(this.ballMesh);
+      if (scene) scene.remove(this.ballMesh);
+      this.ballMesh = null;
     }
+  }
+
+  createProjectile(scene) {
+    this.removeProjectile(scene);
 
     // Projectile — radius from the bowl-opening ratio (see setBall): default
     // 0.45 kg -> r 30 mm = 60% of the 0.05 m bowl inner radius; max 0.60 kg
@@ -528,6 +707,12 @@ export class PhysicsWorld {
     });
 
     this.world.addBody(this.ballBody);
+    // Ball is collision-free while seated (pinned in cup / on stand): it only
+    // starts colliding the moment releaseBall() flips the mask (2026-09-30).
+    // Otherwise the seated ball overlaps the new chassis body at the release
+    // pose (cup swings down over the deck) and the solver spits it out.
+    this.ballBody.collisionFilterGroup = 1;
+    this.ballBody.collisionFilterMask = 0;
     this.ballShape = ballShape;
 
     // Play thud only when ball is in flight and hits something
@@ -618,6 +803,33 @@ export class PhysicsWorld {
     while (this._acc >= fixedDt) {
       this.world.step(fixedDt);
       this._acc -= fixedDt;
+    }
+
+    // Seesaw-inversion limit: when the ball outweighs the counterweight the arm
+    // naturally rotates cup-up (no slider clamp — real seesaw physics), but its
+    // arc sweeps over the chassis right end, so past ~45° the cup would sink
+    // into the deck.  A physical stopper cannot separate this from the normal
+    // throw arc (both pass the same space), so the limit is logical: past
+    // +0.78 rad the arm is pinned KINEMATIC in place (cup bottom still ~30 mm
+    // above the deck top — visually "held by the chassis", never embedded).
+    // Normal throws never get here: release fires at REST_ANGLE and
+    // lockMechanism pins the arm.  The counterweight stays dynamic (mask 4|2)
+    // and settles naturally.
+    const armAng = this.getArmAngle();
+    const armSpin = this.mechArmBody ? this.mechArmBody.angularVelocity.z : 0;
+    // A throw releases at +85 deg and swings back (armSpin < 0) — never lock that.
+    // The reverse case (ball outweighs cw after release) spins cup-ward (armSpin > 0)
+    // and must be stopped before the cup sweeps into the chassis, but only AFTER a
+    // short free-swing window so the arm is actually moving when the stop engages
+    // (locking at the release angle reads as "stuck", not "held by the chassis").
+    if (this._releaseFreeMs > 0) {
+      this._releaseFreeMs -= fixedDt * 1000;
+    } else if (this.mechArmBody && this.mechArmBody.type === CANNON.Body.DYNAMIC && armAng > 0.75 && armSpin > 0.05) {
+      this.mechArmBody.type = CANNON.Body.KINEMATIC;
+      this.mechArmBody.velocity.set(0, 0, 0);
+      this.mechArmBody.angularVelocity.set(0, 0, 0);
+      this.mechCwBody.collisionFilterMask = 4 | 2 | 1; // box may swing back onto the deck
+      this._cwSettle = true;
     }
 
     // Counterweight hover-settle (post-lock only; _cwSettle is false during the
