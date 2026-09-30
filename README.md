@@ -4,7 +4,15 @@
 
 **An interactive 3D trebuchet simulation that grows from a hand-drawn blueprint into a real-time rigid-body physics model.**
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue) [English](#english) · [中文](#中文)
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Three.js](https://img.shields.io/badge/Three.js-r160-black?logo=three.js)
+![Cannon-es](https://img.shields.io/badge/Cannon--es-v0.20.0-lightgrey)
+![Vite](https://img.shields.io/badge/built%20with-Vite-646CFF?logo=vite)
+![JavaScript](https://img.shields.io/badge/language-JavaScript-F7DF1E?logo=javascript)
+![Web](https://img.shields.io/badge/platform-Web-blue)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/recohcity/paper-trebuchet)
+
+<br>[English](#english) · [中文](#中文)
 
 </div>
 
