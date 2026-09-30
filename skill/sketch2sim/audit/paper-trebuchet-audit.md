@@ -190,3 +190,30 @@ Cannon-es 建模陷阱（见 `references/physics-pitfalls.md` 第 12、13 条）
 - 卷筒铰盘旋转速度与摆杆角速度的比例（含绳长几何）仍为视觉近似，未做精确绳长-角度解析（纯装饰件，可接受）。
 - 全场景阻挡中，球架托盘/卷筒细节仍为 Box 近似碰撞体，与视觉轮廓有微差。
 - 演示档（6.0/0.60）与默认档（4.8/0.45）分离为叙事参数，需在文档中持续声明，避免被误当交互默认。
+
+
+## 更新（2026-10-02）：V7 审核闭环——脚本/spec 参数网格从 Spec 读取 + 新范围暴露引擎偏差
+
+外部审核指出两点：sweep/xcheck 脚本参数网格滞后于代码（字节未变、旧区间 0.30-1.00），
+spec.json release/fitted 未更新。核实后：release=at_stop/fitted 与 fitted_quantities 已在
+V6 前更新（审核者的具体例证不成立），但**核心精神成立**——spec 的配重区间与脚本网格
+仍停留在旧上限 4.0（实际产品 1.40-10.0）。本轮彻底修复：
+
+1. **spec.json**（examples + references 副本）：counterweight mass_range [1.4, 10.0]、
+   default_mass 4.8；inputs 新增 `ball_kg`（range [0.30, 0.60]、default 0.45）；
+   counterweight_kg range 更新为 [1.4, 10.0] + default 4.8；range_provenance 如实更新。
+2. **sweep_trebuchet.mjs / xcheck_suite.mjs**：网格改为从 Spec 读取
+   （mass_range/default_mass + counterweight_kg/ball_kg inputs），以后滑块区间变化只需
+   重跑同一命令，不用改脚本——一次性解决"还会漏"。
+3. **重跑暴露真实差异（最有价值的发现）**：新网格覆盖 1.4-10.0 后，product-range
+   xcheck 出现 4/8 FAIL——大配重+轻球（cw≥4.8、ball 0.30-0.45）下 cannon 释放角比
+   rigid 参考低 ~1.9-2.0°（29.3 vs 31.2°，相对 5-6%），速度/落点仍在 5% 内。
+   尝试 solver iterations 50→100 / tolerance 1e-7→1e-8 未收敛，确认是 HingeConstraint
+   强驱动下释放时机的系统偏移，非迭代不足。按"不掩盖、不改门槛"原则：保持 5% 判据，
+   如实输出 FAIL 并在 xcheck_suite.mjs 注释 + pitfall #18 follow-up 中记录为已知引擎偏差。
+4. **pitfall #18 补 follow-up**：脚本已从 Spec 读取网格；宽区间会重新打开引擎-参考
+   一致性检验——重跑并报告，不沿用旧 PASS。
+
+教训（沉淀进 skill）：审核反馈即使具体例证过期，其指出的"机制性滞后"仍可能真实存在——
+逐字比对之外，要检查 spec/脚本是否覆盖当前实际运行区间。滑块区间一扩，引擎 vs 参考
+的一致性必须重验。

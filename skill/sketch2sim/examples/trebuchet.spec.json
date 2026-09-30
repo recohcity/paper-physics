@@ -74,9 +74,9 @@
    "box_size": 0.13,
    "mass_range": [
     1.4,
-    4.0
+    10.0
    ],
-   "default_mass": 2.6,
+   "default_mass": 4.8,
    "container_mass": {
     "value": 0.0,
     "provenance": "assumed:ignored"
@@ -107,9 +107,19 @@
    "id": "counterweight_kg",
    "range": [
     1.4,
-    4.0
+    10.0
    ],
-   "range_provenance": "code:physics.js/trebuchet.js slider min 1.40 max 4.00 default 2.60 (sand full = 4.0 kg; lower bound keeps release from stalling)"
+   "default": 4.8,
+   "range_provenance": "code:physics.js/trebuchet.js slider min 1.40 max 10.0 default 4.8 (sand full = 10 kg; lower bound keeps release from stalling; upper bound opened to 10 kg for strong throws)"
+  },
+  {
+   "id": "ball_kg",
+   "range": [
+    0.30,
+    0.60
+   ],
+   "default": 0.45,
+   "range_provenance": "derived:ball diameter mapped to 60%-80% of the 100 mm cup bore (0.45 kg -> 60%, 0.60 kg -> 80%)"
   }
  ],
  "target": {

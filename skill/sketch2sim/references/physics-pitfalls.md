@@ -157,6 +157,16 @@ change, and keep the old grids recorded as regression history. The boundary is n
 cw 1.00/1.20 with ball 0.45 -> NO RELEASE, cw 1.40 -> releases at 1.23 m/s; ball 0.60 + cw 1.40
 (a reachable slider combination) -> NO RELEASE, so the UI lower-left corner is a no-throw zone.
 Checklist items M2/M3 (static balance / energy budget).
+Follow-up (V7, 2026-10-02): sweep_trebuchet.mjs and xcheck_suite.mjs now READ their grids from the
+Spec (counterweight mass_range/default_mass + counterweight_kg / ball_kg inputs), so any future
+slider change is picked up by re-running the same command instead of hand-editing the grids.
+Re-running over the expanded range (cw 1.4-10.0) EXPOSED a real gap the old grid (max 4.0) could
+not see: at cw >= 4.8 with ball 0.30-0.45, the Cannon-es release angle runs ~1.9-2.0 deg below
+the reference (29.3 vs 31.2 deg, 5-6% relative) with speed/land within 5% — a HingeConstraint
+release-timing offset under strong driver torque. Solver iterations 50->100 did not converge it;
+it is recorded as known engine bias (xcheck_suite.mjs comment) instead of being masked by a
+looser gate. Lesson: a widened slider range re-opens engine-vs-reference agreement; re-run and
+report, never carry the old PASS forward.
 
 
 ## 19. User "load" interactions change the mechanism's degrees of freedom — sliders and resets must re-settle
