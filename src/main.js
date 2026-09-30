@@ -95,6 +95,15 @@ class App {
     this.pullDeg = 0;
     this.armVelocity = 0;
 
+    // Ball load flight: the cannonball arcs from the stand into the cup along
+    // a fast parabola on every load (Fire button, rack/cup click, tour FIRE).
+    this._ballFlying = false;
+    this._ballFlightTween = null;
+    this._ballLoadPromise = null;
+    this._ballLoadResolve = null;
+    this._loadSeq = 0;
+    this._pointerUpDuringLoad = false;
+
     // Mouse drag interaction state
     this.isDraggingCup = false;
     this.dragStartY = 0;
@@ -418,6 +427,11 @@ class App {
   // release speed for a 0.05 m shallow bowl.
   updateBallInCup() {
     if (this.physics.ballReleased) return;
+    // While the ball is animating from the stand into the cup — including the
+    // one-microtask seating hand-off after the tween completes — don't snap it
+    // back to the rack/cup every frame: the flight tween owns the mesh until
+    // the caller clears _ballFlying right before seating it in the cup.
+    if (this._ballFlying) return;
     // While the ball is seated (not released) keep it collision-free: its body
     // sits inside the cup / on the stand, and the cup arc swings over the new
     // chassis body — mask 0 avoids the solver spitting it out.  releaseBall()
@@ -551,19 +565,93 @@ class App {
   }
 
   // Set counterweight mass
-  // Click the stand ball into the cup.  The beam is freed on the live hinge so
-  // it settles like a seesaw under the real torque balance: a heavy ball tips
-  // it cup-down (left-tilted, cannot throw), a heavy counterweight keeps it
-  // ready to drag.
-  loadBall() {
-    if (this.ballLoaded || this.physics.ballReleased || this.isFiring) return;
+  // Load the cannonball into the cup.  Instead of teleporting, the ball arcs
+  // from the stand into the cup along a fast parabola, so its origin is always
+  // visible.  The beam is freed on the live hinge so it settles like a seesaw
+  // under the real torque balance: a heavy ball tips it cup-down (left-tilted,
+  // cannot throw), a heavy counterweight keeps it ready to drag.
+  async loadBall() {
+    if (this.ballLoaded || this._ballFlying || this.physics.ballReleased || this.isFiring) return;
     if (this.isTourRunning) return; // the tour drives its own load step
+    const seq = ++this._loadSeq;
+    sound.playTilt(0.6);
+    await this.flyBallToCup(); // ball flies stand -> cup along a parabola
+    if (seq !== this._loadSeq) return; // cancelled mid-flight (e.g. Reset)
     this.ballLoaded = true;
+    // Seating hand-off: the flight tween is done and the cup owns the ball
+    // now.  Clear the flag BEFORE updateBallInCup() so the seat actually runs;
+    // it stayed set through the await so no per-frame call could yank the
+    // just-landed ball back to the rack.
+    this._ballFlying = false;
     this.rebalanceLoaded(); // 4:1 lever gate: cw holds right tilt (ready) or ball seesaws down
     this.updateBallInCup();
-    sound.playTilt(0.6);
     // No ball-weight callout / no drag instruction when loading by click:
     // only the slider-adjusted weight hint stays (user directive 2026-10-01).
+  }
+
+  // Fast parabolic flight from the stand (the ball's current rest position)
+  // into the cup.  A quadratic Bézier is exactly a parabola: the control point
+  // sits at the horizontal midpoint, apex above both endpoints.  Only the mesh
+  // moves — the physics body stays parked on the stand (collision mask 0) until
+  // the flight completes, when callers seat it via updateBallInCup().  Returns
+  // a promise resolved once the ball reaches the cup.
+  flyBallToCup() {
+    if (this._ballFlying) return this._ballLoadPromise;
+    const b = this.physics;
+    if (!b.ballMesh) return Promise.resolve();
+    const standPos = b.ballMesh.position.clone();
+    const cupTarget = this.trebuchet.getCupWorldPosition();
+    cupTarget.y -= this.trebuchet.cupR - b.ballRadius;
+
+    // Apex ~0.17 m above the higher endpoint — clearly readable from every view
+    const apex = Math.max(0.14, Math.abs(cupTarget.y - standPos.y) * 0.3 + 0.17);
+    const cx = (standPos.x + cupTarget.x) / 2;
+    const cz = (standPos.z + cupTarget.z) / 2;
+    const cy = Math.max(standPos.y, cupTarget.y) + apex;
+
+    this._ballFlying = true;
+    sound.playLoadWhoosh();
+    const self = this;
+    this._ballLoadPromise = new Promise((resolve) => {
+      self._ballLoadResolve = resolve;
+      const tween = new TWEEN.Tween({ f: 0 })
+        .to({ f: 1 }, 300) // fast, decisive toss
+        .easing(TWEEN.Easing.Quadratic.InOut)
+        .onUpdate((o) => {
+          const f = o.f, g = 1 - f;
+          // Quadratic Bézier (parabola): P(t) = g²P0 + 2gf·C + f²P2
+          b.ballMesh.position.set(
+            g * g * standPos.x + 2 * g * f * cx + f * f * cupTarget.x,
+            g * g * standPos.y + 2 * g * f * cy + f * f * cupTarget.y,
+            g * g * standPos.z + 2 * g * f * cz + f * f * cupTarget.z
+          );
+        })
+        .onComplete(() => {
+          // The flight flag stays set through the seating hand-off: the caller
+          // (loadBall / tour FIRE step) clears it only after it has seated the
+          // ball in the cup.  If we cleared it here, the same RAF tick's
+          // per-frame updateBallInCup() would see ballLoaded still false and
+          // pin the ball back to the rack for one rendered frame (the "ghost
+          // ball on the stand" flash), then the microtask continuation would
+          // snap it into the cup.
+          self._ballFlightTween = null;
+          if (self._ballLoadResolve) { self._ballLoadResolve(); self._ballLoadResolve = null; }
+        })
+        .start();
+      self._ballFlightTween = tween;
+    });
+    return this._ballLoadPromise;
+  }
+
+  // Abort an in-flight load animation (Reset / entering build mid-flight).
+  // Stops the tween, frees the pending promise, and bumps the load sequence so
+  // any awaiting loadBall() continuation bails out without seating the ball.
+  cancelBallFlight() {
+    this._loadSeq++;
+    if (this._ballFlightTween) { this._ballFlightTween.stop(); this._ballFlightTween = null; }
+    this._ballFlying = false;
+    if (this._ballLoadResolve) { this._ballLoadResolve(); this._ballLoadResolve = null; }
+    this._ballLoadPromise = null;
   }
 
   // 4:1 lever balance gate (real-cock hold): with the short arm = 1/4 of the
@@ -621,7 +709,10 @@ class App {
   // fix): fire() releases the mechanism (KINEMATIC -> DYNAMIC) and gravity
   // drives it through the counterweight pendulum.  Release speed and angle are
   // read back from the physics state at the stop angle — no fitted formulas.
-  fire(fromDrag = false) {
+  async fire(fromDrag = false) {
+    // If the ball is still arcing into the cup (a quick Fire right after a
+    // click-to-load), wait for it to seat before releasing the mechanism.
+    if (this._ballFlying && this._ballLoadPromise) await this._ballLoadPromise;
     // Reset recoil state before this launch (a previous shot may still have
     // been mid-return when the user refired).
     this.recoilVel = 0;
@@ -632,6 +723,10 @@ class App {
     // into a launch: only a completed downward drag calls fire(true).
     if (!fromDrag && this.pullDeg < 10) {
       this.setPullAngle(this.MAX_PULL_DEG);
+      // Auto-pull ratchet: the arm snaps to cocked on Fire — sound the same
+      // tick the player would hear dragging the beam by hand (user directive
+      // 2026-10-01: 落杯 → 摆杆声 → 弹射呼啸).
+      sound.playTilt(0.5);
     }
 
     this.isFiring = true;
@@ -647,7 +742,9 @@ class App {
     }
     this._staleBall = false;
     this.physics.resetImpact();
-    sound.playLaunch();
+    // Launch whoosh now plays at the true release instant (releaseBall) so the
+    // auto-Fire sequence reads: load whoosh → arm-pull ratchet → release
+    // whoosh (user directive 2026-10-01).
 
     this.annotations.clear();
     this.physics.ballReleased = false;
@@ -778,6 +875,11 @@ class App {
     this.physics.ballBody.velocity.set(vx, vy, vz);
     this.physics.ballBody.wakeUp();
 
+    // The instant the ball leaves the cup, play the same light upward whoosh
+    // it flew in with (user directive 2026-10-01): the ball's arc — into the
+    // cup and out of it — is one continuous airy swoosh.
+    sound.playLoadWhoosh();
+
     // Recoil kick: the ball (~0.45 kg @ ~3.5 m/s) carries ~1.6 kg·m/s; against
     // the full machine (~8 kg incl. the counterweight) that is ~0.2 m/s of
     // carriage recoil.  Slightly exaggerated so the kick reads on screen while
@@ -895,6 +997,7 @@ class App {
   }
 
   resetAll() {
+    this.cancelBallFlight(); // stop any stand->cup arc mid-flight
     this.isFiring = false;
     this._staleBall = false; // ball re-seated to the stand — nothing lingering
     this.armVelocity = 0;
@@ -919,6 +1022,10 @@ class App {
       this.tourAbortController.abort();
       this.tourAbortController = null;
     }
+    // Aborting the running tour may cut a stand->cup flight short; clear the
+    // flight state (flag, tween, pending promise) so the next tour run or
+    // build entry cannot inherit a stale in-flight ball.
+    this.cancelBallFlight();
     this.isTourRunning = true;
     this.setPlayButtonState(false);
     this.setSlowMo(false);
@@ -990,6 +1097,9 @@ class App {
         this.tourAbortController.abort();
         this.tourAbortController = null;
       }
+      // Pausing mid-step-6 flight abandons the run: stop the stand->cup arc so
+      // the flight flag does not stay set and freeze the ball mid-air.
+      this.cancelBallFlight();
       this.setPlayButtonState(false);
       this.showTourBanner('Tour paused. Click Play to resume or Rewind to restart.');
     } else {
@@ -1519,27 +1629,17 @@ class App {
         // tween, no tour-specific angle/counterweight.
         this.ballLoaded = false;
         this.updateBallInCup();
-        const standBall = new THREE.Vector3(
-          this.ballStandPos.x,
-          this.ballStandSeatY + this.physics.ballRadius,
-          this.ballStandPos.z
-        );
-        const cupTarget = this.trebuchet.getCupWorldPosition();
-        cupTarget.y -= this.trebuchet.cupR - this.physics.ballRadius;
         sound.playTilt(0.5);
-        await tweenPromise(
-          { f: 0 },
-          { f: 1 },
-          600,
-          TWEEN.Easing.Quadratic.InOut,
-          (o) => {
-            this.physics.ballMesh.position.lerpVectors(standBall, cupTarget, o.f);
-          }
-        );
+        await this.flyBallToCup(); // ball arcs from the stand into the cup (parabola)
+        if (signal.aborted) throw new Error('Tour aborted');
         this.ballLoaded = true;
+        // Seating hand-off (same contract as loadBall): the flight flag stays
+        // set until the cup owns the ball, so the per-frame updateBallInCup()
+        // can never flash a ghost ball back onto the stand.
+        this._ballFlying = false;
         this.updateBallInCup();
         await sleep(300);
-        this.fire();
+        await this.fire();
         // 2 s after fire the replay step takes over (user directive:
         // "改2秒后进入replay").  If FIRE's shot is still live (ball bounced
         // off the tower and hasn't "landed"), REPLAY force-finishes it before
@@ -1585,7 +1685,7 @@ class App {
         this.btnToggleFlightPath.classList.add('active');
         this.annotations.showTrajectories = true;
         this.pullDeg = 0;
-        this.fire();
+        await this.fire();
         // Full slow-mo replay: keep playing until the iron ball leaves the
         // scene (flies out of view) or comes to rest after impact — never
         // pause right after it lands.  Bounded by a generous timeout.
@@ -1744,6 +1844,7 @@ class App {
     // starts on the stand — the player loads it by clicking.  Also reset any
     // scattered demo blocks (jumping into build mid-tour must clean the tour
     // scene, user 2026-10-01).
+    this.cancelBallFlight(); // stop any stand->cup arc mid-flight
     this.physics.resetBlocks();
     this.ballLoaded = false;
     this.setPullAngle(0);
@@ -1806,16 +1907,16 @@ class App {
     });
 
     // Fire button
-    this.btnFire.addEventListener('click', () => {
+    this.btnFire.addEventListener('click', async () => {
       // The panel is available in custom mode, including Top view.  The tour
       // stays playback-only even if a hidden control receives a focus event.
       if (this.isTourRunning) return;
       if (!this.ballLoaded) {
         sound.init();
-        this.loadBall(); // Fire auto-picks the cannonball from the stand
+        await this.loadBall(); // Fire auto-picks the cannonball — it arcs from the stand into the cup
       }
       sound.init();
-      this.fire();
+      await this.fire();
     });
 
     // Reset button
@@ -1985,7 +2086,7 @@ class App {
       return this.raycaster.ray.intersectPlane(this.dragPlane, this.dragPointerWorld);
     };
 
-    const finishDrag = (launch) => {
+    const finishDrag = async (launch) => {
       if (!this.isDraggingCup) return;
 
       this.isDraggingCup = false;
@@ -1999,11 +2100,11 @@ class App {
 
       // A press is only a grab.  The arm launches exclusively after a real,
       // downward pull and release, so accidental clicks cannot fire the ball.
-      if (launch && this.dragMoved && this.pullDeg > 8) this.fire(true);
+      if (launch && this.dragMoved && this.pullDeg > 8) await this.fire(true);
       this.controls.enabled = true;
     };
 
-    const onPointerDown = (e) => {
+    const onPointerDown = async (e) => {
       // Hero and Side show the throwing arc clearly enough for direct
       // manipulation.  Top is deliberately panel-only: its almost parallel
       // camera ray makes a spoon drag ambiguous, while Fire still works.
@@ -2029,8 +2130,18 @@ class App {
         // Load the cannonball: clicking the ball, its stand, OR the bowl/arm
         // itself places the ball into the cup (pick-up, not drag — any view).
         if (!this.ballLoaded && (hitBall || hitStand || hitCup)) {
-          this.loadBall();
-          // Fall through into the drag grab: the ball appears in the cup and
+          // If the pointer is released while the ball is arcing into the cup
+          // (a click-to-load, not a press-and-drag), skip the spoon grab.
+          this._pointerUpDuringLoad = false;
+          const onRelease = (ev) => { if (ev.pointerId === e.pointerId) this._pointerUpDuringLoad = true; };
+          window.addEventListener('pointerup', onRelease, { once: true });
+          window.addEventListener('pointercancel', onRelease, { once: true });
+          await this.loadBall(); // ball arcs from the stand into the cup (parabola)
+          if (this._pointerUpDuringLoad) {
+            this._pointerUpDuringLoad = false;
+            return; // click-to-load only — no drag grab
+          }
+          // Fall through into the drag grab: the ball lands in the cup and
           // the spoon is already held — pull down without releasing the mouse
           // (user directive 2026-10-01).  Top view still drops out below.
         }

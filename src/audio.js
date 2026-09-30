@@ -61,6 +61,8 @@ class SoundManager {
   }
 
   // 2. 发射 / 松手音效：大炮射击、炮膛喷发轰鸣（Cannon blast & projectile launch thump）
+  // 注：当前 fire() 发射时改用 playLoadWhoosh()（与装弹同款呼啸，2026-10-01 用户
+  // 指令）；playLaunch 保留为大炮轰隆备选，未被接线调用。
   playLaunch() {
     if (this.muted) return;
     this.init();
@@ -130,7 +132,42 @@ class SoundManager {
     this.playLaunch();
   }
 
-  // 3. 拖拽勺子的连续微动音效（清脆刻度点击感）
+  // 3. 球从球架抛物线飞入发射杯的轻快上行呼啸音效（快速上抛的空气感）
+  playLoadWhoosh() {
+    if (this.muted) return;
+    this.init();
+    const now = this.ctx.currentTime;
+    const dur = 0.22;
+    const bufSize = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buf;
+
+    // 动态带通：低频起、中高频掠过再回落，呈现一颗小球被抛起划过空气的呼啸
+    const bpf = this.ctx.createBiquadFilter();
+    bpf.type = 'bandpass';
+    bpf.frequency.setValueAtTime(700, now);
+    bpf.frequency.exponentialRampToValueAtTime(2300, now + 0.10);
+    bpf.frequency.exponentialRampToValueAtTime(1100, now + dur);
+    bpf.Q.setValueAtTime(1.4, now);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.22, now + 0.06);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    noise.connect(bpf);
+    bpf.connect(gain);
+    gain.connect(this.ctx.destination);
+    noise.start(now);
+  }
+
+  // 4. 拖拽勺子的连续微动音效（清脆刻度点击感）
   playTilt(intensity = 0.5) {
     if (this.muted) return;
     this.init();

@@ -29,7 +29,16 @@ are all generated from it. Full worked example: `examples/trebuchet.spec.json`.
 - `materials[]`: id, density, friction/restitution pairs (`provenance` each)
 - `joints[]`: id, type (`hinge | slider | fixed | ball`), parts, axis, anchor points, limits, `provenance`
   (joint types are the most ambiguous thing in a 2D drawing; default to `assumed` and ask)
-- `mechanism`: template-specific block (see `hinged_lever_with_hanging_counterweight` in the example)
+- `guides[]`: id, the payload part it constrains, the track/channel part providing the surface, and a rough
+  path (points or curve description) in scene units. Use for a part that follows a fixed surface under its
+  own dynamics (ramp, chute, rail) rather than being pinned to it — do not encode these as `joints`.
+- `fields[]`: id, `source_part`, `acts_on` (parts affected), `kind` (`magnetic | electrostatic | gravity |
+  other`), `monotonicity` (`increasing_with_distance | decreasing_with_distance | constant`), `provenance`.
+  The exact force law is usually `assumed` or unknown; `monotonicity` alone is frequently enough to reach a
+  feasibility verdict (see `references/mechanism-templates.md`) without ever measuring field strength.
+- `mechanism`: template-specific block. Check `references/mechanism-templates.md` for a template that already
+  matches before writing a new one (e.g. `hinged_lever_with_hanging_counterweight` in the example, or
+  `monotonic_field_gravity_loop` for a field-driven payload on a gravity-return track).
 - `inputs[]`: id, range, `range_provenance` (prefer `derived`: e.g. cocking angle limited by ground contact)
 - `outputs[]`: id, unit, and for counted outcomes an explicit **criterion** (e.g. what "knocked down" means)
 - `target`/`environment`: arrangements the mechanism acts on

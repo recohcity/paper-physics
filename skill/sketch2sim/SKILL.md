@@ -42,51 +42,64 @@ physically work is worse than no model, because it will be believed.
 
 ## Workflow (local / Claude Code route)
 
-0. **Intake.** Collect all views available (ask for side/top views). Ask: what should be validated, the scale
-   anchor (one known real dimension), materials, and which parts move.
-1. **Read the sketch part by part.** Vision for semantics (what each part is, where joints probably are);
-   scripts for measurement (contours, circles, OCR of dimension marks). Output parts with pixel coordinates
-   and a confidence per part. *(status: planned, see Status)*
-2. **Write the Spec** (`references/spec-schema.md`). Convert pixels to metres with the anchor. List every
-   ambiguity (joint type, thickness, material, hidden dimensions) and get the user to confirm or correct
-   them before continuing. Ambiguities left unresolved become `assumed` entries.
+0. **Intake.** Before anything else, run the view-requirements checklist in `references/sketch-intake.md`
+   part A: how many views, scale anchor, legibility. Ask for what's missing in one message; do not start
+   recognition on an image that fails the legibility or scale-anchor checks. Also ask what should be
+   validated and which parts move.
+1. **Read the sketch part by part.** Follow `references/sketch-intake.md` part B: Claude's own vision does
+   the semantic read (what each part is, where joints probably are) and produces the parts/joints/ambiguities
+   JSON directly — no separate CV script. A script only does arithmetic downstream (pixel-to-metre, Spec
+   assembly), never the recognition itself.
+2. **Write the Spec** (`references/spec-schema.md`). Follow `references/sketch-intake.md` part C: turn the
+   ambiguities from step 1 into batched, guess-first questions and get the user to confirm or correct them.
+   `scale.status` must be `"OK"` before continuing. Anything left unanswered becomes an `assumed` entry.
 3. **Feasibility gate** (next section). Stop and report if it fails.
 4. **Reference solution.** Solve the mechanism analytically or with a small custom integrator
    (`scripts/mech2d.mjs` is the pattern: Lagrangian, RK4, energy-drift check). This is ground truth for step 5.
 5. **Engine build and cross-check.** Build bodies and constraints from the Spec (Three.js + Cannon-es). For
    the hinged-lever template, run the Cannon-es build and the reference solver on the same inputs and require
    agreement within ~5% on launch speed and angle: `scripts/cannon_trebuchet.mjs` (single point) and
-   `scripts/xcheck_suite.mjs` (regression suite). Any larger gap means a modeling or engine-setup bug —
-   see `references/physics-pitfalls.md` items 12-13 for the two bugs this caught. The 5% gate covers the
-   engine build vs the reference solver (both 240 Hz fixed-step); a browser build that samples release on
-   60 Hz rAF frames carries ~±7% sampling bias and needs its own baseline (checklist V2 note). For a new
-   mechanism template, write its reference solver and engine build first; the cross-check is what makes
-   the engine trustworthy, so do not skip it.
-6. **Sweeps.** Sweep the design inputs headlessly (`scripts/sweep_trebuchet.mjs`), find sensitivity and
-   failure regions, and search for parameter changes that fix a failing design (`scripts/search_fix.mjs`).
+   `scripts/xcheck_suite.mjs` (regression suite, grids generated from the Spec's input ranges — re-run
+   whenever those ranges change, old passes do not carry over, `physics-pitfalls.md` #18). Any larger gap
+   means a modeling or engine-setup bug — see `references/physics-pitfalls.md` items 12-13 for the two bugs
+   this caught, and item where a widened range exposed a genuine ~2 degree engine release-angle bias that was
+   reported as FAIL rather than masked. The 5% gate covers the engine build vs the reference solver (both
+   240 Hz fixed-step); a browser build that samples release on 60 Hz rAF frames carries ~±7% sampling bias
+   and needs its own baseline (checklist V2 note). For a new mechanism template, write its reference solver
+   and engine build first; the cross-check is what makes the engine trustworthy, so do not skip it.
+6. **Sweeps.** Sweep the design inputs headlessly (`scripts/sweep_trebuchet.mjs`, grids generated from the
+   Spec), find sensitivity and failure regions, and search for parameter changes that fix a failing design
+   (`scripts/search_fix.mjs`).
 7. **Interaction and instruments.** Direct manipulation (drag = temporary override, release = hand back to
    dynamics), input ranges derived from geometry, live readouts, slow motion, replay, view presets. For
    tours, part labels, hotspots and any scene prop the user can interact with, run checklist items T1-T7
    (anchors from real mesh positions, deterministic label layout, explicit step end conditions, static end
-   state, real colliders for participating props, decorative parts decoupled from dynamics, one-pointer
-   compound interactions). Before slow-mo/replay demos, run P7 (staged collision activation for a projectile
-   that starts overlapping the launcher) and the event-driven replay end condition (T3, pitfall 23).
+   state, real colliders for every scene prop, decorative parts decoupled from dynamics, compound gestures
+   complete in one pointer session). Before slow-mo/replay demos, run P7 (staged collision activation for
+   a projectile that starts overlapping the launcher) and the event-driven replay end condition (T3,
+   pitfall 23).
 8. **Code architecture.** Keep one runtime source of truth (`src/spec.js` pattern: physics / 3D / UI read
    the same module that mirrors the Spec), split controller files that exceed ~800 lines, and remove stale
    comments and temp hooks. Run `references/architecture-checklist.md`; a refactor must not move the physics
    numbers (re-run the cross-check and a browser launch before/after).
 9. **Report** using the template below. Export `spec.json` next to the build.
 
+Steps 0-2 are the only ones that differ when auditing an existing project instead of starting from a sketch:
+skip straight to extracting a Spec from the code (`source.kind: "code-extraction"`, see "Auditing an existing
+demo" below) and rejoin at step 3.
+
 ## Scripts (all are template-specific: hinged_lever_with_hanging_counterweight)
 
 - `scripts/mech2d.mjs` — rigid reference solver (Lagrangian 2-DOF + RK4), exports `simulate()` and `fitted()`.
-- `scripts/sweep_trebuchet.mjs` — feasibility sweeps over mass/pull/release; reads the Spec.
+- `scripts/sweep_trebuchet.mjs` — feasibility sweeps; grids read from the Spec's `mass_range`/`default_mass`
+  and `counterweight_kg`/`ball_kg` inputs, so a range change re-runs correctly without editing the script.
 - `scripts/search_fix.mjs` — grid search for parameter changes that hit the Spec target.
 - `scripts/cannon_trebuchet.mjs` — Cannon-es hinge build, single-point cross-check vs `mech2d.mjs` (V2).
-- `scripts/xcheck_suite.mjs` — V2 regression suite over the audit's fix variants; requires `cannon-es`.
-  Install it outside the skill and run with `NODE_PATH`, e.g. `mkdir -p /tmp/cannon-xcheck && cd /tmp/cannon-xcheck
-  && npm init -y && npm install cannon-es`, then `NODE_PATH=/tmp/cannon-xcheck/node_modules node
-  scripts/xcheck_suite.mjs examples/trebuchet.spec.json`.
+- `scripts/xcheck_suite.mjs` — V2 regression suite: the original audit-fix variants (regression history) plus
+  a product-range family generated from the Spec. Requires `cannon-es`; install it outside the skill and run
+  with `NODE_PATH`, e.g. `mkdir -p /tmp/cannon-xcheck && cd /tmp/cannon-xcheck && npm init -y && npm install
+  cannon-es`, then `NODE_PATH=/tmp/cannon-xcheck/node_modules node scripts/xcheck_suite.mjs
+  examples/trebuchet.spec.json`.
 - New mechanism templates need their own reference solver and engine build; these scripts do not transfer.
 
 ## Feasibility gate (do this first, cheap and decisive)
@@ -117,7 +130,7 @@ numbers, and use `search_fix.mjs`-style search to propose parameter changes that
 
 1. Scope: what was validated, scale anchor and how it was chosen.
 2. Assumptions table: every `assumed` and `fitted` item with its value.
-3. Gate results and reference-vs-engine agreement (V2: cite `xcheck_suite.mjs` output).
+3. Gate results and reference-vs-engine agreement (V2: cite `xcheck_suite.mjs` output, both variant families).
 4. Sensitivity: which parameters move the outcome most.
 5. Verdict using the vocabulary above.
 6. **Not modeled** list.
@@ -125,12 +138,12 @@ numbers, and use `search_fix.mjs`-style search to propose parameter changes that
 
 ## Lite edition (single HTML, for onboarding)
 
-Same Spec, reduced fidelity: one sketch, simplified physics, no CV extraction, no cross-check. Delivery
+Same Spec, reduced fidelity: one sketch, simplified physics, no cross-check, no overlay check. Delivery
 checks before calling it done:
 
 - Shows a visible "demonstration grade" badge; must **not** issue a feasibility verdict.
 - Exports `spec.json` next to the build with `scale.status` and every load-bearing quantity's provenance.
-- Lists what the full local workflow adds (measurement, overlay check, sweeps, feasibility report).
+- Lists what the full local workflow adds (multi-view intake, overlay check, sweeps, feasibility report).
 - Confirms the hosting environment's allowed CDNs actually serve the physics libraries before promising it.
 
 ## Auditing an existing demo
@@ -141,25 +154,47 @@ evidence. Worked example: `audit/paper-trebuchet-audit.md`.
 
 ## References
 
+- `references/sketch-intake.md` view requirements, recognition output format, ambiguity confirmation protocol (workflow steps 0-2)
+- `references/mechanism-templates.md` known mechanism classes and the feasibility gate for each; check before deriving a new gate
 - `references/spec-schema.md` fields, provenance, validation rules
 - `references/architecture-checklist.md` code-quality checks (single source of truth in code, module boundaries, stale residue); run when building or refactoring the interactive build
 - `references/physics-pitfalls.md` engine and modeling pitfalls with evidence
+- `references/capability-guide.md` what sketch types this skill can validate, what it cannot, and how to choose (read first when handed a new sketch)
 - `references/audit-checklist.md` checkable items for building or auditing
 
 ## Status (be honest with users)
 
-Validated on one case (paper-trebuchet): Spec extraction, reference solver, energy check, sweeps, fix search,
-audit checklist, and the V2 engine cross-check (`xcheck_suite.mjs`, 5/5 variants within ~5% on speed and
-angle). The audit has since survived six rounds: V2 cross-check landed the two cannon-es modeling bugs
-(pitfalls 12-13); V3 added checklist items M6 (declared values must reach runtime bodies — the
-"2.60 kg default never reached physics" inversion) and P6 (background-tab rAF freeze artifact), plus the
-front-end sampling-bias note on V2 (~±7% at 60 Hz rAF release sampling); V4 ran the architecture checklist
-(`src/spec.js` single source of truth, A1-A9); V5 (interaction layer) added T1-T5 (real-mesh label anchors,
-deterministic non-overlapping layout, explicit replay end conditions, static tour end state, colliders for
-participating scene props) and pitfalls 16-17. V6 (physics-fidelity round, 2026-10-01) added principles 6-7
-(natural mechanics without guard code; decorative parts visual-follow only), checklist P7 (staged collision
-activation for a projectile overlapping the launcher), T6 (decorative parts never affect launch readouts),
-T7 (compound interactions complete in one pointer session), extended T3 (event-driven replay end condition,
-pitfall 23) and T5 (whole-scene blocking), and pitfalls 21-23. All still single-case evidence; a second mechanism type
-(linkage / stability class) is the planned next pressure test. Not yet built: CV-based sketch extraction,
-overlay fidelity check, UI scaffold. Do not describe planned steps as if they were available.
+Validated on one case (paper-trebuchet), always via code-extraction (`source.kind: "code-extraction"`) —
+every run so far started from existing code, never a real sketch. Spec extraction, reference solver, energy
+check, sweeps, fix search, audit checklist, and the V2 engine cross-check are all proven this way, across
+multiple rounds that landed real cannon-es modeling bugs (pitfalls 12-13), a declared-value-never-reaches-
+runtime bug (M6), a background-tab rAF freeze artifact (P6), an architecture pass (A1-A9), an interaction
+layer pass (T1-T7), and a case where widening the input range re-opened the cross-check and surfaced a
+genuine ~2 degree engine release-angle bias, reported as FAIL rather than masked (physics-pitfalls #18, #V2
+scripts now grid-generate from the Spec instead of hardcoding a range, so this doesn't silently go stale
+again). All of that is real, but all of it is single-case and starts from code, not a drawing.
+
+**Workflow steps 0-2 (sketch -> Spec) now have a written procedure** (`references/sketch-intake.md`): view
+requirements, a part-by-part recognition output format, and an ambiguity-confirmation protocol. This closes
+the gap where the skill's own workflow listed step 1 as "planned" while every actual run skipped it via
+code-extraction. **It has not been run on a real sketch yet** — treat it as a first draft that the first real
+sketch will correct, not as validated. The overlay fidelity check (render the build from the sketch's view,
+diff against it) is designed in principle in `sketch-intake.md` but not built.
+
+**First real sketch has now been run** (chat, 1648 Wilkins lodestone perpetual-motion design — not the
+trebuchet): steps 0-1 exercised the intake checklist and the recognition JSON on a genuine hand-drawn-style
+image with no scale anchor and no dimensions. It surfaced a real gap immediately — the recognition schema
+had `joints` but nothing for a track-follower or a non-contact force, which this mechanism is entirely made
+of — closed by adding `guides[]`/`fields[]` to the schema (`spec-schema.md`, `sketch-intake.md`) and a new
+`references/mechanism-templates.md` cataloging feasibility gates per mechanism class. This case also proved
+a gate can be *scale-independent* (a monotonicity argument, no reference solver, no sweep) where the
+trebuchet's gates always needed numbers — useful evidence the workflow isn't secretly numeric-only. Not yet
+done for this case: a Spec/report file (the verdict was reached and is recorded above, but not filed the way
+`audit/paper-trebuchet-audit.md` files the trebuchet's); steps 2 (ambiguity confirmation) and beyond were
+skipped because the case resolved at step 3 without needing them.
+
+Still pending: (1) a sketch that goes all the way through steps 2 onward (ambiguity confirmation, Spec
+write, and — for a feasible design — the engine build and interaction layer) since the Wilkins case never
+needed to; (2) a mechanism template that needs a genuinely new *numeric* gate (not scale-invariant like
+either case so far); (3) the overlay fidelity check, still undesigned in detail beyond the one paragraph in
+`sketch-intake.md`. Do not describe any of these as done.
