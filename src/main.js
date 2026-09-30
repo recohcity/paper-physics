@@ -70,7 +70,7 @@ class App {
     // Simulation settings
     this.slowMotion = false;
     this.timeScale = 1.0;
-    this.counterweightKg = UI.counterweight.value; // hover recalibration — spec.js (2.6 kg throws the 0.45 kg ball onto the pyramid)
+    this.counterweightKg = UI.counterweight.value; // hover recalibration — spec.js (default 4.8 kg throws the 0.45 kg ball onto the pyramid)
     this.ballKg = UI.ball.value; // solid steel projectile — spec.js (density 7850 kg/m³, r = 60% of the 100 mm bowl opening)
     this.flightPathEnabled = false;
     // Ball-stand feature: the cannonball starts on a wooden stand at the
@@ -90,8 +90,9 @@ class App {
     // Pull angle in degrees:
     // 0° = rest (counterweight sitting on chassis floor, spoon up)
     // > 0° = pulled down (counterweight hoisted in the air, spoon down)
-    // 84.5° is the exact physical limit where the cradle bottom rests on the paper (Y=0.006)
-    this.MAX_PULL_DEG = 135; // down-pull limit: beam pulled 135° from vertical -> 45° from mast (max energy) [user:2026-09-29]
+    // 135° down-pull = 45° from the mast (max energy, 4:1 lever [user:2026-09-29]);
+    // at this pose the cradle bottom stays ~8 cm above the paper, so nothing penetrates.
+    this.MAX_PULL_DEG = 135;
     this.pullDeg = 0;
     this.armVelocity = 0;
 
@@ -218,7 +219,7 @@ class App {
     // 3. Create Trebuchet wooden model on the left
     this.trebuchet = new TrebuchetModel(this.scene, this.balsaTexture, this.leadTexture);
     this.trebuchet.setCounterweight(this.counterweightKg);
-    // Keep the UI sliders in sync with the physics-calibrated defaults (2.60 kg
+    // Keep the UI sliders in sync with the physics-calibrated defaults (4.8 kg
     // counterweight, 0.45 kg steel ball — hover recalibration, see CHANGELOG).
     if (this.weightSlider) this.weightSlider.value = this.counterweightKg;
     if (this.weightLabel) this.weightLabel.textContent = `${this.counterweightKg.toFixed(2)} kg`;
@@ -238,9 +239,10 @@ class App {
     this.physics.buildRope();
     // Push the UI-default counterweight into the mechanism: createMechanism()
     // builds the cw body with the physics-constructor default (1.0 kg) and no
-    // setCwMass() was called before, so the DEFAULT slider value 2.60 never
-    // reached the physics body — the arm hung cocked like the ball outweighed
-    // the box (mechanism inversion).  Re-assert it now (and on every rebuild).
+    // setCwMass() was called before, so the DEFAULT slider value (then 2.60 kg,
+    // M6 pitfall; now 4.8 from spec.js UI.counterweight) never reached the
+    // physics body — the arm hung cocked like the ball outweighed the box
+    // (mechanism inversion).  Re-assert it now (and on every rebuild).
     this.physics.setCwMass(this.counterweightKg);
 
     // Ball stand (needs trebuchet.woodMat, so built after the model)

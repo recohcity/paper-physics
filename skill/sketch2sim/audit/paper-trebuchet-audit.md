@@ -1,5 +1,11 @@
 # paper-trebuchet 反向审计报告
 
+> **历史快照注记（2026-10-02）**：本报告反映的是 0.0.x 早期审计状态——其中"演示级/经验公式"、
+> "V2 交叉验证 Unverified"等结论均已在后续轮次推翻：0.1.0 改为真实铰链动力学（fire() 拟合公式删除）、
+> V2 引擎-解算器交叉验证已 Pass（`xcheck_suite.mjs`，见 `audit-checklist.md` V2 状态）。
+> 本文件保留为审计方法示例与历史证据，不代表当前项目状态；当前状态以 `references/audit-checklist.md`
+> 与 `references/physics-pitfalls.md` 的最新标注为准。
+
 审计对象：`recohcity/paper-trebuchet`（读取了 physics.js、trebuchet.js、main.js、textures.js、environment.js、audio.js）
 审计依据：`references/audit-checklist.md`　工具：`scripts/mech2d.mjs`、`sweep_trebuchet.mjs`、`search_fix.mjs`
 

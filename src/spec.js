@@ -53,7 +53,7 @@ export const GEOM = {
 export const UI = {
   counterweight: { min: 1.40, max: 10, value: 4.80, step: 0.01 }, // sand full = 10 kg [user:2026-09-30]; 4:1 lever: cw>=4.8 (v>=3.1 m/s) topples the 3rd layer; cw 3.70 falls short of the pyramid front edge; 10.00 -> max power
   ball:          { min: 0.30, max: 0.60, value: 0.45, step: 0.01 },
-  pull:          { max: 84.5 },   // derived: cradle-bottom touches paper
+  pull:          { min: 0, max: 135, value: 0, step: 0.5 }, // 135° = 45° from the mast (max energy, 4:1 lever [user:2026-09-29]); mirrors index.html #pull-slider
   morph:         { min: 0, max: 100, value: 100, step: 1 },
   zoom:          { min: 60, max: 200, value: 160, step: 5 },
 };

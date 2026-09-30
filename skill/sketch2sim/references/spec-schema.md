@@ -36,9 +36,10 @@ are all generated from it. Full worked example: `examples/trebuchet.spec.json`.
   other`), `monotonicity` (`increasing_with_distance | decreasing_with_distance | constant`), `provenance`.
   The exact force law is usually `assumed` or unknown; `monotonicity` alone is frequently enough to reach a
   feasibility verdict (see `references/mechanism-templates.md`) without ever measuring field strength.
-- `mechanism`: template-specific block. Check `references/mechanism-templates.md` for a template that already
-  matches before writing a new one (e.g. `hinged_lever_with_hanging_counterweight` in the example, or
-  `monotonic_field_gravity_loop` for a field-driven payload on a gravity-return track).
+- `mechanism`: domain-specific block (see `references/mechanism-templates.md` for the physics domain).
+  The sub-block shape follows the domain's reference implementation — e.g. `rigid_linkage` (hinged lever)
+  in the example, `field_force` for a field-driven payload, `track_guided` for a payload on a rail. A
+  device may draw on several domains; `mechanism` holds the geometry they share.
 - `inputs[]`: id, range, `range_provenance` (prefer `derived`: e.g. cocking angle limited by ground contact)
 - `outputs[]`: id, unit, and for counted outcomes an explicit **criterion** (e.g. what "knocked down" means)
 - `target`/`environment`: arrangements the mechanism acts on

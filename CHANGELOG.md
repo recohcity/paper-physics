@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] — skill 全量一致性审计 + 代码限位/注释核清 + 全对象碰撞音效（2026-10-02）
+
+### skill 一致性审计（12 文件，术语与证据全部对齐物理域架构）
+- **物理域术语统一（template → domain）**：recognition JSON `template_guess` → `domains[]`（可多域组合）；spec-schema `mechanism` 块改为 domain-specific；SKILL.md workflow step 5 与 scripts 注释、audit-checklist V2、两份 spec 的 `mechanism.type`（→ `rigid_linkage`）统一术语。
+- **physics-pitfalls 过时代码引用更新**（教训保留、证据校正）：#1 拟合公式行号、#2 A4 尺度矛盾、#4 84.5° 限位（现 135°）、#5 硬编码 32°、#7 帧率步长、#9 纹理硬编码 —— 全部对照当前代码逐条验证后标注「历史案例 + Update(2026-10-02) 当前状态」；#3/#14 旧参数数字标注「当时」。
+- **SKILL.md Feasibility gate 补规则缺口**：「gate 形状取决于物理域，先查 mechanism-templates，可多域组合」（原来只描述 rigid_linkage 一种 gate，与 field_force 单调场闸门矛盾）；Verdict 表补「结论限于声明的 L0-L5 还原级别」。
+- **audit/paper-trebuchet-audit.md 加历史快照注记**：「演示级/V2 Unverified」等早期结论已被 0.1.0 推翻，避免误导。
+
+### 代码层限位与注释核清（84.5° 之谜）
+- **84.5° 是旧几何（4:1 之前 cradle 触纸角）残留，当前生效限位是 135°**（下拉 135° = 与支架 45°，最大能量 [user:2026-09-29]）。修复：`spec.js` UI.pull `{max:84.5}` → `{min:0,max:135,value:0,step:0.5}`（与 index.html 滑条一致，单一数据源归位）；`main.js` MAX_PULL_DEG 旁 84.5 矛盾注释、`physics.js`「纸接触是下拉物理下限」注释（现为解析 clamp 135°，纸接触仅安全网）全部更正。
+- **配重残留注释清理**：`main.js` 3 处 2.6/2.60 kg → 默认 4.8 kg（M6 bug 案例标「当时 2.60」）；`physics.js` 头注释上限 1.40-4.00 → **1.40-10.0（默认 4.8）**，旧浏览器基线（2.6 kg → 3.53 m/s/31°）标注历史、待按当前默认重新实测。
+- 全链路验证：84.5° 残留 0 处；135° 在 main.js/trebuchet.js/spec.js/index.html 全部一致；`npm run build` 通过。
+
+### 全对象碰撞音效（2026-10-01，自 0.1.1 条目移入——0.1.1 已发布，本功能在 0.1.3 才合入 git）
+- **球撞遍物理世界都有声**：新增 `playHit(kind)` 通用碰撞音效并按被撞对象材质分音色——铅笔「轻木嗒」、蓝白橡皮「橡胶闷咚」、整台投石机「硬木/金属哐」、球架「木架嗒」；积木方块保持原有 `playBlockHit` 不变。
+- **按碰撞体分发**：各物理体打 `userData.hit` 标记（blocks/propBodies/球架/机架/臂/配重），球的 collide 监听按标记分发音效，`relVel > 0.3 m/s` 才发声、强度随撞击速度缩放；未标记对象（纸面/桌面等）回退原有木块声。
+
 ## [0.1.2] — sketch intake 流程落地 + 能力引导（skill 0.1.1/0.1.2 合并，2026-10-02）
 
 ### sketch-intake.md 新增（workflow 第 0–2 步从 "planned" 转为具体流程）

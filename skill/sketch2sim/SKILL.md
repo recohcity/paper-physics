@@ -57,7 +57,7 @@ physically work is worse than no model, because it will be believed.
 4. **Reference solution.** Solve the mechanism analytically or with a small custom integrator
    (`scripts/mech2d.mjs` is the pattern: Lagrangian, RK4, energy-drift check). This is ground truth for step 5.
 5. **Engine build and cross-check.** Build bodies and constraints from the Spec (Three.js + Cannon-es). For
-   the hinged-lever template, run the Cannon-es build and the reference solver on the same inputs and require
+   the rigid_linkage domain (the hinged-lever build), run the Cannon-es build and the reference solver on the same inputs and require
    agreement within ~5% on launch speed and angle: `scripts/cannon_trebuchet.mjs` (single point) and
    `scripts/xcheck_suite.mjs` (regression suite, grids generated from the Spec's input ranges — re-run
    whenever those ranges change, old passes do not carry over, `physics-pitfalls.md` #18). Any larger gap
@@ -65,7 +65,7 @@ physically work is worse than no model, because it will be believed.
    this caught, and item where a widened range exposed a genuine ~2 degree engine release-angle bias that was
    reported as FAIL rather than masked. The 5% gate covers the engine build vs the reference solver (both
    240 Hz fixed-step); a browser build that samples release on 60 Hz rAF frames carries ~±7% sampling bias
-   and needs its own baseline (checklist V2 note). For a new mechanism template, write its reference solver
+   and needs its own baseline (checklist V2 note). For a new physics domain, write its reference solver
    and engine build first; the cross-check is what makes the engine trustworthy, so do not skip it.
 6. **Sweeps.** Sweep the design inputs headlessly (`scripts/sweep_trebuchet.mjs`, grids generated from the
    Spec), find sensitivity and failure regions, and search for parameter changes that fix a failing design
@@ -88,7 +88,7 @@ Steps 0-2 are the only ones that differ when auditing an existing project instea
 skip straight to extracting a Spec from the code (`source.kind: "code-extraction"`, see "Auditing an existing
 demo" below) and rejoin at step 3.
 
-## Scripts (all are template-specific: hinged_lever_with_hanging_counterweight)
+## Scripts (all are domain-specific: rigid_linkage / hinged-lever family)
 
 - `scripts/mech2d.mjs` — rigid reference solver (Lagrangian 2-DOF + RK4), exports `simulate()` and `fitted()`.
 - `scripts/sweep_trebuchet.mjs` — feasibility sweeps; grids read from the Spec's `mass_range`/`default_mass`
@@ -100,11 +100,13 @@ demo" below) and rejoin at step 3.
   with `NODE_PATH`, e.g. `mkdir -p /tmp/cannon-xcheck && cd /tmp/cannon-xcheck && npm init -y && npm install
   cannon-es`, then `NODE_PATH=/tmp/cannon-xcheck/node_modules node scripts/xcheck_suite.mjs
   examples/trebuchet.spec.json`.
-- New mechanism templates need their own reference solver and engine build; these scripts do not transfer.
+- New physics domains need their own reference solver and engine build; these scripts do not transfer.
 
 ## Feasibility gate (do this first, cheap and decisive)
 
-For any mechanism that stores energy and throws, lifts or moves something:
+**The gate shape depends on the physics domain** — check `references/mechanism-templates.md` and use the
+gate of every domain the sketch matches (a device may combine several). The rigid_linkage gate below is the
+one for anything that stores energy and throws, lifts or moves something:
 
 - **Static balance:** at the start pose and along the travel, is the net torque of the driver larger than
   the opposing torque of the payload plus structure? If the payload side outweighs the driver at any angle
@@ -125,6 +127,9 @@ numbers, and use `search_fix.mjs`-style search to propose parameter changes that
 | + gate passes, reference solver agrees with engine | "Kinematically and dynamically plausible at concept level" |
 | + sweeps show margin around the operating point | "Feasible within the modeled assumptions" |
 | any load-bearing `fitted` quantity | "Demonstration only. Not a feasibility result." |
+
+Every verdict is scoped to the declared physics-restore level (L0-L5, see `references/capability-guide.md`):
+a build that stops at L2 kinematics claims nothing about L3-L5 dynamics.
 
 ## Report template
 
@@ -155,11 +160,11 @@ evidence. Worked example: `audit/paper-trebuchet-audit.md`.
 ## References
 
 - `references/sketch-intake.md` view requirements, recognition output format, ambiguity confirmation protocol (workflow steps 0-2)
-- `references/mechanism-templates.md` known mechanism classes and the feasibility gate for each; check before deriving a new gate
+- `references/mechanism-templates.md` physics-domain modules (`rigid_linkage` / `field_force` / `track_guided` / future domains), their gates and tooling, combination rules; check before deriving a gate from scratch — modules are matched by physical theory, not by device shape
 - `references/spec-schema.md` fields, provenance, validation rules
 - `references/architecture-checklist.md` code-quality checks (single source of truth in code, module boundaries, stale residue); run when building or refactoring the interactive build
 - `references/physics-pitfalls.md` engine and modeling pitfalls with evidence
-- `references/capability-guide.md` what sketch types this skill can validate, what it cannot, and how to choose (read first when handed a new sketch)
+- `references/capability-guide.md` what sketch types this skill can validate, what it cannot, the L0-L5 physics-restore levels, and how to choose (read first when handed a new sketch)
 - `references/audit-checklist.md` checkable items for building or auditing
 
 ## Status (be honest with users)
@@ -193,8 +198,21 @@ done for this case: a Spec/report file (the verdict was reached and is recorded 
 `audit/paper-trebuchet-audit.md` files the trebuchet's); steps 2 (ambiguity confirmation) and beyond were
 skipped because the case resolved at step 3 without needing them.
 
+**Architecture decision (2026-10-02, user-confirmed):** device-shaped templates do not scale — real-world
+sketches are arbitrarily diverse, so a per-device catalog would grow without bound. `mechanism-templates.md`
+was rewritten from mechanism classes to **physics-domain modules** (`rigid_linkage` / `field_force` /
+`track_guided` / future `control`·`elastic`·`hydro_aero`), combinable per device: a new domain is warranted
+only by a new physical theory or math tool, never by a different device shape. `capability-guide.md` adds
+the **L0-L5 physics-restore ladder** (L0 geometry → L1 materials → L2 kinematics → L3 rigid dynamics → L4
+friction/collision → L5 fields/drives/control) — every task declares its restore level up front, and a
+verdict is scoped to that level. Entry is open (any sketch can enter the common pipeline); modules are
+specific (each domain carries its gate + reference implementation + tooling).
+
 Still pending: (1) a sketch that goes all the way through steps 2 onward (ambiguity confirmation, Spec
 write, and — for a feasible design — the engine build and interaction layer) since the Wilkins case never
-needed to; (2) a mechanism template that needs a genuinely new *numeric* gate (not scale-invariant like
+needed to; (2) a mechanism domain that needs a genuinely new *numeric* gate (not scale-invariant like
 either case so far); (3) the overlay fidelity check, still undesigned in detail beyond the one paragraph in
-`sketch-intake.md`. Do not describe any of these as done.
+`sketch-intake.md`; (4) the **robot arm / robot mechanism as the next composition pressure test** —
+`rigid_linkage` × N joints plus a new `control` domain (motor drive / joint angles / inverse kinematics via
+D-H or screw theory), which will be the first multi-domain combination and the first build that needs the L2
+kinematics math, not just L3-L4 dynamics. Do not describe any of these as done.

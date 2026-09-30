@@ -7,15 +7,16 @@ import { MECH, UI } from './spec.js';
 // SCALE ANCHOR: 1 scene unit = 1 m (single source of truth; audit F3).
 // Gravity (9.82), masses (kg), densities (kg/m³) and mm display all derive
 // from it.  All mechanism numbers (arm x ∈ [-0.596, 0.315], rest angle -1.00,
-// apexY 0.5964 hover geometry, counterweight slider 1.40-4.00, ball slider
+// apexY 0.5964 hover geometry, counterweight slider 1.40-10.0 (default 4.8), ball slider
 // 0.30-0.60) live in src/spec.js — mirrors skill sketch2sim spec.json.
 // Lower bound 1.40 kg keeps the released arm from inverting (mech2d sweep);
-// below it the throw stalls.  The upper bound is open to 4.00 kg; a heavier
-// BALL than counterweight is a normal seesaw — the arm simply settles cup-
-// down and is stopped by the paper (mask 4) / chassis limiter (group 8),
+// below it the throw stalls.  The upper bound is open to 10.0 kg (sand full);
+// a heavier BALL than counterweight is a normal seesaw — the arm simply settles
+// cup-down and is stopped by the paper (mask 4) / chassis limiter (group 8),
 // never by clamping the sliders (see pitfall #18 re-run note).  Browser-
-// verified baseline: default 2.6 kg x 0.45 kg -> 3.53 m/s / 31° / down 1-4
-// (see CHANGELOG 0.1.3).
+// verified baseline (historical, 2.6 kg default era): 2.6 kg x 0.45 kg ->
+// 3.53 m/s / 31° / down 1-4; the current 4.8 kg default needs a fresh browser
+// re-measure before it is quoted as a baseline.
 // ---------------------------------------------------------------------------
 
 export class PhysicsWorld {
@@ -127,6 +128,7 @@ export class PhysicsWorld {
     chassisBox.collisionFilterGroup = 64;
     chassisBox.collisionFilterMask = 0xffffffff;
     chassisBox._relX = 0; // chassis is group-local x=0 -> world x = groupX
+    chassisBox.userData = { hit: 'machine' };
     this.world.addBody(chassisBox);
     this._chassisBodies.push(chassisBox);
     // Two A-frame side plates (covers rear/front slanted legs + centre post at
@@ -139,6 +141,7 @@ export class PhysicsWorld {
       frame.collisionFilterGroup = 64;
       frame.collisionFilterMask = 0xffffffff;
       frame._relX = 0; // A-frame is also group-local x=0 (legs span x[-0.92,0.24])
+      frame.userData = { hit: 'machine' };
       this.world.addBody(frame);
       this._chassisBodies.push(frame);
     });
@@ -153,6 +156,7 @@ export class PhysicsWorld {
         wheel.collisionFilterGroup = 64;
         wheel.collisionFilterMask = 0xffffffff;
         wheel._relX = wx; // world x = groupX + wx
+        wheel.userData = { hit: 'machine' };
         this.world.addBody(wheel);
         this._chassisBodies.push(wheel);
       });
@@ -165,6 +169,7 @@ export class PhysicsWorld {
     winch.collisionFilterGroup = 64;
     winch.collisionFilterMask = 0xffffffff;
     winch._relX = -0.27;
+    winch.userData = { hit: 'machine' };
     this.world.addBody(winch);
     this._chassisBodies.push(winch);
 
@@ -209,6 +214,7 @@ export class PhysicsWorld {
     stand.position.set(x, 0, z);
     stand.collisionFilterGroup = 64;
     stand.collisionFilterMask = 0xffffffff;
+    stand.userData = { hit: 'stand' };
     this.world.addBody(stand);
     this._standCollider = stand;
   }
@@ -261,10 +267,13 @@ export class PhysicsWorld {
     // mask 4 (paper, group 4) + 8 (chassis arm-limiter, group 8): the arm now
     // really collides.  It must NOT collide with the counterweight (group 2,
     // hinge-connected) or ball/blocks/props (group 1) — 4|8 contains none of
-    // those, so the throw path and the block physics are untouched.  The paper
-    // contact is the physical bottom limit of the downward pull (cradle-bottom
-    // touches paper at ~84.5°); the limiter plate is the seesaw-inversion stop.
+    // those, so the throw path and the block physics are untouched.  The
+    // physical bottom limit of the downward pull is the analytic clamp at
+    // maxPullDeg = 135° (45° from the mast; cradle stays ~8 cm clear of the
+    // paper, so paper contact is only a safety net, not the working limit);
+    // the limiter plate (group 8) is the seesaw-inversion stop.
     armBody.collisionFilterGroup = 2 | 32; armBody.collisionFilterMask = 4 | 8 | 1;
+    armBody.userData = { hit: 'machine' };
     this._applyInertia(armBody, this._mechIcm);
     this.world.addBody(armBody);
     this.mechArmBody = armBody;
@@ -279,6 +288,7 @@ export class PhysicsWorld {
                                      linearDamping: 0.05, angularDamping: 0.30 });
     cwBody.addShape(new CANNON.Box(new CANNON.Vec3(box / 2, box / 2, box / 2)));
     cwBody.collisionFilterGroup = 2; cwBody.collisionFilterMask = 4 | 1;
+    cwBody.userData = { hit: 'machine' };
     this.world.addBody(cwBody);
     this.mechCwBody = cwBody;
 
@@ -365,13 +375,14 @@ export class PhysicsWorld {
   // are static boxes whose size/pose mirror the meshes (drawn in the scene
   // at 1 unit = 1 m).
   addPropColliders(pencilGroup, eraserGroup) {
-    const addStatic = (halfExtents, pos, quat, mat) => {
+    const addStatic = (halfExtents, pos, quat, mat, hitKind) => {
       const body = new CANNON.Body({ type: CANNON.Body.STATIC, material: mat });
       body.addShape(new CANNON.Box(new CANNON.Vec3(halfExtents[0], halfExtents[1], halfExtents[2])));
       body.position.set(pos.x, pos.y, pos.z);
       if (quat) body.quaternion.set(quat.x, quat.y, quat.z, quat.w);
       body.collisionFilterGroup = 1;  // default group: collides with ball & blocks
       body.collisionFilterMask = 0xffffffff;
+      body.userData = { hit: hitKind }; // ball hit-sound dispatch (2026-10-01)
       this.world.addBody(body);
       return body;
     };
@@ -380,13 +391,13 @@ export class PhysicsWorld {
       const pos = pencilGroup.getWorldPosition(new THREE.Vector3());
       const quat = pencilGroup.getWorldQuaternion(new THREE.Quaternion());
       // pencil ≈ 1.33 long (body 1.0 + tip + ferrule + pink eraser), r≈0.036
-      this.propBodies.push(addStatic([0.665, 0.036, 0.036], pos, quat, this.materials.woodMaterial));
+      this.propBodies.push(addStatic([0.665, 0.036, 0.036], pos, quat, this.materials.woodMaterial, 'pencil'));
     }
     if (eraserGroup) {
       const pos = eraserGroup.getWorldPosition(new THREE.Vector3());
       const quat = eraserGroup.getWorldQuaternion(new THREE.Quaternion());
       // blue-white block eraser: 0.50 x 0.109 x 0.20
-      this.propBodies.push(addStatic([0.25, 0.0545, 0.10], pos, quat, this.materials.woodMaterial));
+      this.propBodies.push(addStatic([0.25, 0.0545, 0.10], pos, quat, this.materials.woodMaterial, 'eraser'));
     }
     return this.propBodies;
   }
@@ -634,6 +645,7 @@ export class PhysicsWorld {
             }
           }
         });
+        body.userData = { hit: 'block' };
 
         this.world.addBody(body);
         this.blocks.push(body);
@@ -715,12 +727,20 @@ export class PhysicsWorld {
     this.ballBody.collisionFilterMask = 0;
     this.ballShape = ballShape;
 
-    // Play thud only when ball is in flight and hits something
+    // Play the material-appropriate hit sound whenever the ball (in flight)
+    // strikes anything: blocks keep playBlockHit; the pencil, eraser, whole
+    // trebuchet and ball stand get their own timbre via playHit (2026-10-01).
     this.ballBody.addEventListener('collide', (e) => {
       if (!this.ballReleased) return;
       const relVel = Math.abs(e.contact.getImpactVelocityAlongNormal());
       if (relVel > 0.3) {
-        sound.playBlockHit(Math.min(1.0, relVel / 3));
+        const kind = (e.body && e.body.userData && e.body.userData.hit) || 'block';
+        const intensity = Math.min(1.0, relVel / 3);
+        if (kind === 'block') {
+          sound.playBlockHit(intensity);
+        } else {
+          sound.playHit(kind, intensity);
+        }
         this._impactMomentum = Math.max(this._impactMomentum, this.ballKg * relVel);
       }
     });

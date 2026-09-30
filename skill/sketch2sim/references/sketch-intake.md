@@ -38,8 +38,8 @@ produce it — Claude writes it directly from looking at the image(s)):
 
 ```json
 {
-  "template_guess": "hinged_lever_with_hanging_counterweight | four_bar_linkage | ... | custom",
-  "template_confidence": 0.0,
+  "domains": ["rigid_linkage", "field_force", "track_guided", "custom"],
+  "domain_confidence": 0.0,
   "scale_anchor_candidate": { "description": "...", "real_mm": 0, "px": 0, "view": "front", "confidence": 0.0 },
   "parts": [
     { "id": "arm", "label": "long throwing arm", "shape_guess": "extruded rect, ~constant thickness",
@@ -90,8 +90,9 @@ Rules for filling it in:
 - Every joint (anywhere two parts meet or one clearly pivots on another) gets an entry, defaulting
   `type_guess` to `"hinge"` only when rotation is visually obvious (a drawn pin, circle, or hatch mark);
   otherwise `"assumed:fixed"` and flag it — 2D sketches under-specify joints more than anything else.
-- Before writing a new template, check `references/mechanism-templates.md` for one that already matches —
-  it names the feasibility gate to use so step 3 doesn't have to be derived from scratch every time.
+- Before deriving a feasibility gate from scratch, check `references/mechanism-templates.md` for the
+  physics domains that already match — a device may combine several domains (each contributes its gate and
+  tooling), so step 3 doesn't have to be derived from scratch every time.
 - `confidence` is Claude's own calibrated estimate (not a placeholder): a labeled dimension or an unambiguous
   drawn pin is high confidence (>0.85); a part whose thickness, material or exact boundary is not visible is
   low (<0.6).

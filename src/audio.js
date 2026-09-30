@@ -212,6 +212,41 @@ class SoundManager {
     osc.stop(now + 0.09);
   }
 
+  // 球撞不同材质的碰撞声：铅笔（轻木嗒）、蓝白橡皮（橡胶闷咚）、
+  // 整台投石机（硬木哐）、球架（木架嗒）。每个材质一组起始频率/
+  // 落点频率/时长/响度，短促衰减包络，与 playBlockHit 同族但音色可辨
+  // （2026-10-01 用户需求：球对物理世界的碰撞都要出声）。
+  playHit(kind = 'machine', intensity = 1.0) {
+    if (this.muted) return;
+    this.init();
+    const cfg = this._hitCfg[kind] || this._hitCfg.machine;
+    const now = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    const f0 = cfg.f0 + (Math.random() - 0.5) * cfg.jitter;
+    osc.frequency.setValueAtTime(f0, now);
+    osc.frequency.exponentialRampToValueAtTime(cfg.f1, now + cfg.dur * 0.8);
+
+    const volume = Math.min(1.0, cfg.gain * intensity);
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + cfg.dur);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + cfg.dur);
+  }
+
+  // 碰撞音色表（频率 Hz、时长 s、响度系数）
+  _hitCfg = {
+    pencil:  { f0: 430, f1: 135, dur: 0.07, gain: 0.30, jitter: 60 }, // 轻木“嗒”
+    eraser:  { f0: 150, f1: 52,  dur: 0.13, gain: 0.36, jitter: 30 }, // 橡胶闷“咚”
+    machine: { f0: 240, f1: 65,  dur: 0.10, gain: 0.40, jitter: 50 }, // 硬木/金属“哐”
+    stand:   { f0: 320, f1: 92,  dur: 0.085, gain: 0.34, jitter: 50 }, // 木架“嗒”
+  };
+
   // 轻微弹性复位声（仅在低幅度不发射的轻微复位时备用）
   playRestore() {
     this.playTilt(0.3);

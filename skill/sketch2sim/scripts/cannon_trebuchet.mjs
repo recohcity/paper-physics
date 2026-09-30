@@ -3,7 +3,8 @@
 // This validates that engine dynamics (hinge constraints, body inertias) match the Lagrangian model,
 // NOT that the mechanism is feasible. Feasibility verdicts come from the reference solver + sweeps.
 //
-// Mechanism template: hinged_lever_with_hanging_counterweight (trebuchet). Not generic.
+// Domain: rigid_linkage (hinged-lever trebuchet family). Not generic — this script does not transfer
+// to other domains.
 //
 // Requires: cannon-es installed somewhere reachable, e.g.
 //   mkdir -p /tmp/cannon-xcheck && cd /tmp/cannon-xcheck && npm init -y && npm install cannon-es

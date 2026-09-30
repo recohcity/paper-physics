@@ -1,6 +1,6 @@
 // V2 regression suite: run the rigid reference solver and the Cannon-es build over the same
 // design variants and require agreement within 5% on launch speed and angle. This is what moves
-// audit-checklist item V2 from Unverified to Pass for the hinged-lever template.
+// audit-checklist item V2 from Unverified to Pass for the rigid_linkage (hinged-lever) build.
 //
 // Two variant families, reported separately:
 //  - audit-fix regression: the original audit's as-built negative control + proposed fixes A-D

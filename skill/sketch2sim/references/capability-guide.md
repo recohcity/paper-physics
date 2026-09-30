@@ -1,7 +1,15 @@
 # Capability guide (what this skill can and cannot validate)
 
 Read this before handing a new sketch to the workflow — it decides fast whether this skill is the right
-tool, which template to match, and how strong the verdict can be.
+tool, which physics domain(s) apply, how deep to restore the physics, and how strong the verdict can be.
+
+## Positioning: 入口开放，模块指定
+
+- **入口开放**：任何草图（投石机、机械臂、磁石装置、折叠机构、历史图纸……）都能进入通用管线——
+  识别 → 白模 → 材质模型 → 物理装配 → 交互。通用管线不挑设备。
+- **模块指定**：物理层按「物理域模块」按需挂载（`references/mechanism-templates.md`）——每个域提供
+  gate + 参考实现 + 工具链，可组合。设备只是域模块的组合实例，不是模板。
+- 对任意草图只回答两个问题：**还原到哪一级（L0-L5）？需要哪几个域模块？**
 
 ## What this skill does
 
@@ -9,19 +17,34 @@ Turns a hand-drawn sketch of a mechanism into a checkable Spec + interactive 3D 
 one question: **can this mechanism physically do what it claims?** The deliverable is a feasibility verdict
 with provenance, not a pretty model. See `SKILL.md` for the full workflow (steps 0-9).
 
-## Sketch types this skill CAN validate (existing templates)
+## 物理特性还原分级（L0-L5）
 
-| Template | Sketch signature | Gate shape | Tooling | Case |
+每次任务先声明还原到哪一级——它决定工作量的量级，也决定结论能声称什么。
+
+| 级 | 还原内容 | 通用性 | 案例 |
+|---|---|---|---|
+| L0 | 几何白模（识别+尺度+3D） | 全通用 | 任何草图 |
+| L1 | 材质模型（渲染） | 全通用 | 任何草图 |
+| L2 | 运动学（关节/自由度/约束/正逆解） | 通用数学（D-H/旋量/雅可比） | 机械臂正逆运动学 |
+| L3 | 刚体动力学（力/力矩/能量） | 通用（拉格朗日+RK4，`mech2d.mjs`） | 投石机发射 |
+| L4 | 摩擦/碰撞/阻尼（接触物理） | 引擎通用（cannon-es） | 方块击倒、球滚动 |
+| L5 | 场/驱动/控制 | **每引入一个新物理域才加模块** | 磁悬浮、电机机械臂 |
+
+还原物理特性是**选择性地引入真实物理效应**（摩擦、阻尼、弹性、场、驱动），不是无中生有；装饰性
+特性（绳索视觉跟随等）按原则 7 与动力学解耦。还原到 L3 的装置不能声称验证了 L5 的行为。
+
+## Physics domains（现有与规划）
+
+Check `references/mechanism-templates.md` for the current catalog. 摘要：
+
+| 域模块 | 覆盖 | Gate 形状 | 工具链 | 状态 |
 |---|---|---|---|---|
-| `hinged_lever_with_hanging_counterweight` | A beam pivoted off-center; a hanging/fixed mass on the short arm; payload in a cup/sling on the long arm (trebuchet family) | Numeric: static balance + energy budget (`v <= sqrt(2E/m)`); needs a scale anchor and masses | Full chain: `mech2d.mjs` reference solver, cannon cross-check, sweeps, fix search | paper-trebuchet (validated end to end) |
-| `monotonic_field_gravity_loop` | A non-contact force (magnet, charge) pulls a payload up a track toward itself; the payload must pass the source and return via gravity (perpetual-motion "lodestone & ball" family) | Structural non-existence proof: monotonic field cannot both pull strongly enough at max distance AND let go at min distance — no parameter setting works | None needed — the argument settles it; a demo build is demonstration-grade only | 1648 Wilkins lodestone design (verdict reached, no Spec/report filed) |
+| `rigid_linkage` | 投石机、机械臂、折叠机构、连杆 | 数值型：静平衡+能量预算 | 完整（mech2d/cannon/sweep/search_fix） | 投石机已验证；机械臂=多体组合压测 |
+| `field_force` | 磁/静电/引力场 | 结构型：单调场闸门（存在性证明） | 无需数值工具 | Wilkins 永动机已出结论 |
+| `track_guided` | 斜面/滑槽/滑轮 | 待沉淀 | 通用刚体引擎 | 常组合出现 |
+| `control` / `elastic` / `hydro_aero` / … | 驱动控制 / 弹性 / 流体 | 未实现 | — | 未来域，遇新物理理论再沉淀 |
 
-Both gates are **scale-invariant**: feasibility depends on ratios / monotonicity, so they hold at any
-consistent scale. (Speeds, ranges and timing, however, are not scale-invariant — those need a real anchor.)
-
-Check `references/mechanism-templates.md` for the current catalog before deriving anything from scratch.
-
-## Sketch types this skill CANNOT validate
+## What this skill CANNOT validate
 
 - **Strength / fatigue / thermal / fluid / manufacturing tolerance.** Rigid-body physics does not cover
   these; they need FEA or specialized analysis. The workflow states this at every report (principle 5).
@@ -30,11 +53,10 @@ Check `references/mechanism-templates.md` for the current catalog before derivin
 - **Mechanisms that need a numeric gate but arrive without a scale anchor.** `scale.status` must leave
   `CONFLICT` before `measured` provenance is possible; if the person cannot supply an anchor (labeled
   dimension or known-size reference object), stop and ask — do not guess (workflow step 0, `sketch-intake.md`).
-  Exception: monotonicity-style structural arguments (see above) do not need an anchor at all.
-- **Mechanism classes outside the two templates** — e.g. four-bar linkages, stability/falling-object
-  classes — have no reference solver, no engine build and no gate yet. A new class is a real project (see
-  "Adding a new template" in `mechanism-templates.md`), not a parameter tweak. The next planned pressure
-  test is a linkage / stability-class mechanism.
+  Exception: structural arguments (monotonicity, symmetry, conservation) do not need an anchor at all.
+- **A physical domain with no module yet** — e.g. `control` (motor-driven arms), `elastic`,
+  `hydro_aero`: 没有 gate、参考解算器、引擎模板。遇到时按「Adding a new domain」沉淀（新物理/数学
+  工具才是新域；四连杆只是 rigid_linkage 的新组合，不是新域）。
 - **Soft bodies, ropes-as-dynamics, fluids, or anything Cannon-es rigid bodies cannot represent.** Note
   the project's rope/winch are decorative visual-follow (principle 7), not simulated cables.
 
@@ -42,12 +64,14 @@ Check `references/mechanism-templates.md` for the current catalog before derivin
 
 1. **Is there a mechanism to validate, or is this decoration / analysis-only?** Decoration → not this skill;
    FEA-class questions → say so and point to the right analysis.
-2. **Match the sketch to a template** in `mechanism-templates.md`. Matched → use that template's gate and
-   tooling. Unmatched → decide whether this is a *new gate shape* (warrants a new template + reference
-   solver work) or just a new case of an existing one (new numbers, existing tools).
-3. **Does the gate need numbers?** If yes, establish the scale anchor up front (`sketch-intake.md` part A);
+2. **Decide the restore level L0-L5 first**, and say it out loud — it sets the workload and the honest
+   ceiling for the verdict.
+3. **Match the sketch to physics domains** in `mechanism-templates.md`（可多域组合）。Matched → use each
+   domain's gate and tooling. Unmatched → decide whether a *new physical theory / math tool* is needed
+   (warrants a new domain) or it is just a new composition of existing domains.
+4. **Does the gate need numbers?** If yes, establish the scale anchor up front (`sketch-intake.md` part A);
    if the argument is structural (monotonicity, symmetry, conservation), proceed without one and say so.
-4. **Run the gate before building anything** (workflow step 3). If it fails, report the failure with the
+5. **Run the gate before building anything** (workflow step 3). If it fails, report the failure with the
    numbers / argument — do not build a "working" demo of a dead mechanism. A demonstration-grade model may
    still be built to *show* the failure, but it must carry the demonstration badge and no feasibility claim.
 
@@ -57,6 +81,8 @@ Check `references/mechanism-templates.md` for the current catalog before derivin
   assumptions".
 - Structural non-existence proof → "Not feasible as a <field-only / this-class> device; scale-independent".
 - Any load-bearing `fitted` quantity, or a demo-only build → "Demonstration only. Not a feasibility result."
+- Verdicts are scoped to the declared restore level: a build that stops at L2 kinematics claims nothing
+  about L3-L5 dynamics.
 
 ## Current maturity (what is still not proven)
 
@@ -67,6 +93,8 @@ Check `references/mechanism-templates.md` for the current catalog before derivin
   principle but not built.
 - **A genuinely new numeric gate** beyond the trebuchet family has not been exercised (both cases so far are
   scale-invariant in opposite ways).
+- **Multi-body composition** (robot arm: `rigid_linkage` × N + a new `control` domain) is the planned next
+  pressure test — it will be the first case that combines domains and needs L2 kinematics math.
 - Everything validated is **single-case**; the checklist generalizes only as far as the audits it survived.
 
 When in doubt about whether this skill fits a sketch, say what you can validate and what you cannot, and

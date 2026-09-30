@@ -27,7 +27,7 @@
   ]
  },
  "mechanism": {
-  "type": "hinged_lever_with_hanging_counterweight",
+  "type": "rigid_linkage",
   "pivot_local": [
    0.02,
    0.5964

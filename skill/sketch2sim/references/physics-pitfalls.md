@@ -5,19 +5,27 @@ measured with `scripts/mech2d.mjs`, **[inferred]** reasoned from code, not obser
 
 ## 1. Demonstration-grade vs verification-grade
 
-A demo can fake the mechanism and still look excellent. paper-trebuchet does this: the arm angle is
-integrated by hand and the launch speed and angle come from formulas, so only the ball flight and block
-collisions are simulated **[code: main.js 416, 454, 455]**. That is fine for storytelling and unusable for
-validation, because arm length, masses and cup geometry do not appear in those formulas. Rule: if a result
-does not change when the relevant Spec dimension changes, label the build demonstration-grade.
+A demo can fake the mechanism and still look excellent. paper-trebuchet *originally* did this: the arm
+angle was integrated by hand and the launch speed and angle came from formulas, so only the ball flight and
+block collisions were simulated **[historical code: main.js 416/454/455 — those formulas were deleted in the
+0.1.0 hinge-dynamics rewrite]**. That is fine for storytelling and unusable for validation, because arm
+length, masses and cup geometry do not appear in those formulas. Rule: if a result does not change when the
+relevant Spec dimension changes, label the build demonstration-grade.
+*Update (2026-10-02): the launch is now hinge dynamics (real bodies/joints/masses), and the checklist has a
+dedicated probe for this (M1: perturb a Spec dimension and check the result changes). The rule above is the
+general test; the old file:line is retained only as the historical case.*
 
 ## 2. One scale, defined once
 
-The project uses three scales at once: gravity, masses and the RANGE readout assume 1 unit = 1 m; a comment in
-the environment code assumes A4 paper = 2.7 units (1 unit ~ 0.11 m); the demo's "blocks are 40 mm" anchor
-implies 1 unit ~ 0.45 m **[code: physics.js, main.js 524, environment.js 54]**. Fix: define the anchor first,
-derive `g_scene = g / s`, masses from density x volume, and display units from the same factor. Feasibility
-ratios are scale-invariant; speeds, ranges and timing are not.
+The project used three scales at once: gravity, masses and the RANGE readout assumed 1 unit = 1 m; a comment
+in the environment code assumed A4 paper = 2.7 units (1 unit ~ 0.11 m); the demo's "blocks are 40 mm" anchor
+implied 1 unit ~ 0.45 m **[historical code: physics.js, main.js 524, environment.js 54 — the contradicting
+comment is gone; environment.js now labels the paper a desk prop of A4 *aspect ratio*, not a scale anchor]**.
+Fix: define the anchor first, derive `g_scene = g / s`, masses from density x volume, and display units from
+the same factor. Feasibility ratios are scale-invariant; speeds, ranges and timing are not.
+*Update (2026-10-02): paper-trebuchet now declares 1 unit = 1 m once (`src/spec.js`), and the scale block in
+the Spec (`scale.unit_definition` + anchor) is the single authority (checklist S1-S3). The contradiction
+described here is the historical case that motivated it.*
 
 ## 3. Feasibility gate before building
 
@@ -28,25 +36,31 @@ Two numbers decide whether a throwing mechanism can work at all.
   angle-independent and set by `m_cw * a` vs `m_ball * r`.
 - Energy budget: `m_cw*g*dh_cw - m_ball*g*dh_ball - structure PE gain > 0.5*m_ball*v^2`.
 
-paper-trebuchet fails both **[solver]**: with its own numbers (ball 0.20 kg at 0.65 m, counterweight 0.30-1.00 kg
-at 0.185 m, lever ratio 3.5:1) a 0.68 kg counterweight is at neutral balance against the ball alone; adding any
+paper-trebuchet failed both at the audit parameters of the time (ball 0.20 kg at 0.65 m, counterweight
+0.30-1.00 kg at 0.185 m, lever ratio 3.5:1 — all superseded by the 4:1 geometry and 1.40-10 kg range) **[solver]**
+a 0.68 kg counterweight was at neutral balance against the ball alone; adding any
 arm or cup mass makes the payload side win. With a massless arm and the maximum 1.00 kg counterweight the best
 possible speed is 2.2 m/s, landing 0.115 m from the pivot.
 
 ## 4. Do not drive the mechanism kinematically
 
 Hand-integrated `armVelocity += k*dt` cannot respond to design changes and hides energy errors. Use a hinge
-with real inertia, or a reference integrator. Keep a **derived** input limit for user drags: the 84.5 degree
-cocking limit in the project is a good pattern (analytic tangent contact with the paper, clamp the input, do not
-rely on collision resolution) **[code: trebuchet.js 124-126]**.
+with real inertia, or a reference integrator. Keep a **derived** input limit for user drags: the analytic
+tangent-contact limit in the project (cradle bottom touches the paper) is a good pattern — clamp the input,
+do not rely on collision resolution. *Update (2026-10-02): the cocking limit is now `maxPullDeg = 135`
+(beam pulled 135° from vertical -> 45° from the mast, max energy, `trebuchet.js:148`; the "84.5°" number
+referenced earlier was the pre-4:1 geometry's cradle-to-paper limit and is superseded).*
 
 ## 5. Release and stop are modeling decisions
 
 Ideal release at the stop gives the upper bound: ball speed = omega * r, direction tangent to the cup path.
-For the project's geometry that tangent is 39.8 degrees, not the hard-coded 32 **[solver]**. Releasing 5 / 10 / 20
-degrees early changes the angle to 44.8 / 49.8 / 59.8 and lowers speed **[solver]**. Real spoon or sling release
-depends on contact and friction; declare the model (`ideal_at_stop`, `early_release(deg)`, `contact`) in the
-Spec and sweep it.
+For the project's geometry that tangent is 39.8 degrees, not the hard-coded 32 that the demo originally
+used **[solver; the hard-coded angle was deleted in the hinge rewrite]**. Releasing 5 / 10 / 20 degrees early
+changes the angle to 44.8 / 49.8 / 59.8 and lowers speed **[solver]**. Real spoon or sling release depends on
+contact and friction; declare the model (`ideal_at_stop`, `early_release(deg)`, `contact`) in the Spec and
+sweep it. *Update (2026-10-02): paper-trebuchet's stop now releases at ~31° and the Spec declares it
+`fitted` (tuned to hit the target pyramid, deviating from the 39.8° geometric tangent) — provenance, not a
+silent number.*
 
 ## 6. Stacked bodies (the pyramid)
 
@@ -58,8 +72,10 @@ demos; in verification builds use sleeping with tuned thresholds and report if s
 
 ## 7. Time stepping
 
-- Fixed 1/60 accumulator is correct **[code]**. The launch animation instead advances `dt = 0.016*timeScale` per
-  rendered frame **[code: main.js 430]**, so it runs faster on 120 Hz displays **[inferred]**.
+- Fixed 1/60 accumulator is correct **[code]**. The launch animation *originally* advanced `dt =
+  0.016*timeScale` per rendered frame, so it ran faster on 120 Hz displays **[historical: main.js 430 —
+  deleted; the loop now scales the fixed-step delta by timeScale instead, so slow motion stays deterministic
+  (main.js, fire/replay loop)]**.
 - Slow motion scales the physics delta but meshes copy body positions with no interpolation **[code: physics.js
   step]**, so at 0.25x the physics advances once every ~4 frames and motion looks stepped **[inferred]**. Fix:
   interpolate render state between the last two physics states.
@@ -71,8 +87,10 @@ Check `v_max * dt < smallest colliding feature`. Ball diameter 0.092, block 0.08
 
 ## 9. Single source of geometry
 
-Sketch textures use hard-coded pixel coordinates commented as matching 3D positions **[code: textures.js 247]**.
-This caused the block-size fix to be made twice. Generate the sketch layer from the Spec.
+Sketch textures originally used hard-coded pixel coordinates commented as matching 3D positions
+**[historical: textures.js ~247, since reworked]**; this caused the block-size fix to be made twice.
+Generate the sketch layer from the Spec. *Update (2026-10-02): paper-trebuchet now reads the sketch layer
+and 3D geometry from the same `src/spec.js` module (checklist G1: perturb one dimension, both change).*
 
 ## 10. Extruded outlines
 
@@ -108,7 +126,7 @@ Energy tracking (potential + kinetic) must stay flat before doing any comparison
 ## 14. Declared values must actually reach the runtime bodies
 
 The audit checks static balance (M2) on the Spec's numbers, but the runtime bodies only behave per what
-was pushed into them. paper-trebuchet's fix A build looked balanced on paper (2.60 kg default) while the
+was pushed into them. paper-trebuchet's fix-A build looked balanced on paper (then-default 2.60 kg) while the
 physics counterweight body silently stayed at the 1.0 kg constructor default, because `createMechanism()`
 was never followed by `setCwMass()` — the UI default only synced on slider input. First Fire inverted the
 mechanism: the arm stuck at full cock, "as if the ball were heavier than the counterweight"
