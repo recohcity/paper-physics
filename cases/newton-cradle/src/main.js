@@ -1721,7 +1721,7 @@ class App {
         await Promise.all([
           tweenPromise(
             { f: 0.01 },
-            { f: 0.66 },
+            { f: 1.0 },
             1800,
             TWEEN.Easing.Cubic.InOut,
             (o) => {
