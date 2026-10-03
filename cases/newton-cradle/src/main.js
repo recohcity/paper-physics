@@ -272,7 +272,7 @@ class App {
 
     // Load Blender glb to replace inline model once ready
     import('three/addons/loaders/GLTFLoader.js').then(({ GLTFLoader }) => {
-      new GLTFLoader().load('/cradle.glb', (gltf) => {
+      new GLTFLoader().load('cradle.glb', (gltf) => {
         while (this.cradleGroup.children.length) this.cradleGroup.remove(this.cradleGroup.children[0]);
         gltf.scene.traverse((o) => {
           if (o.isMesh) {
@@ -295,7 +295,7 @@ class App {
     // Load custom EXR for metal reflections (via PMREM)
     this._cradleEnvMap = null;
     import('three/addons/loaders/EXRLoader.js').then(({ EXRLoader }) => {
-      new EXRLoader().load('/env.exr', (hdr) => {
+      new EXRLoader().load('env.exr', (hdr) => {
         hdr.mapping = THREE.EquirectangularReflectionMapping;
         const pmrem = new THREE.PMREMGenerator(this.renderer);
         const envRT = pmrem.fromEquirectangular(hdr);

@@ -15,7 +15,7 @@ export class CradleGroup {
   }
 
   async load() {
-    const gltf = await new GLTFLoader().loadAsync('/cradle.glb');
+    const gltf = await new GLTFLoader().loadAsync('cradle.glb');
     gltf.scene.traverse((o) => {
       if (o.isMesh) {
         o.castShadow = true; o.receiveShadow = true;
@@ -29,7 +29,7 @@ export class CradleGroup {
   }
 
   async setEnvMap() {
-    const exr = await new EXRLoader().loadAsync('/env.exr');
+    const exr = await new EXRLoader().loadAsync('env.exr');
     exr.mapping = THREE.EquirectangularReflectionMapping;
     const pm = new THREE.PMREMGenerator(this.renderer);
     this._envMap = pm.fromEquirectangular(exr).texture;
