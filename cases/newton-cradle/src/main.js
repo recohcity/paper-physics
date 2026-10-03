@@ -277,10 +277,7 @@ class App {
         gltf.scene.traverse((o) => {
           if (o.isMesh) {
             o.castShadow = true; o.receiveShadow = true;
-            // balls appear vertically stretched; compress Y to make them round
-            if (/ball/i.test(o.name)) {
-              o.scale.y = 0.80;
-            }
+            // balls: keep original scale (re-exported from Blender)
             // replace Wood material with trebuchet wood
             if (o.material && o.material.name === 'Wood' && this.trebuchet.woodMat) {
               o.material = this.trebuchet.woodMat;
