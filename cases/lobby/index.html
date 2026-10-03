@@ -239,7 +239,7 @@ fitTopCamera();
 // Two blueprint cards lying flat on the desk. sketch.jpg is 1568x1600
 // (~0.98:1 near-square), so the plane matches that aspect to avoid stretching.
 // ---------------------------------------------------------------------------
-const sketchTex = new THREE.TextureLoader().load('/lobby-assets/newton-cradle.jpg', (t) => {
+const sketchTex = new THREE.TextureLoader().load('lobby-assets/newton-cradle.jpg', (t) => {
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
 });
@@ -255,7 +255,7 @@ tbImg.onload = () => {
   tbCtx.drawImage(tbImg, 0, 0, 1024, 700);
   trebuchetTex.needsUpdate = true;
 };
-tbImg.src = '/lobby-assets/trebuchet.png';
+tbImg.src = 'lobby-assets/trebuchet.png';
 const trebuchetTex = new THREE.CanvasTexture(tbCanvas);
 trebuchetTex.colorSpace = THREE.SRGBColorSpace;
 
