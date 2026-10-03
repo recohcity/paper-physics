@@ -262,9 +262,10 @@ trebuchetTex.colorSpace = THREE.SRGBColorSpace;
 const CARD_W = 1.35;
 const CARD_H = 0.925;
 
+const isLocal = location.hostname === 'localhost';
 const cardDefs = [
-  { url: 'http://localhost:5173/', x: -0.55, z: 0.15, yaw: -0.12, tex: trebuchetTex },
-  { url: 'http://localhost:5174/', x: 0.65, z: -0.15, yaw: 0.1, tex: sketchTex },
+  { url: isLocal ? 'http://localhost:5173/' : '/cases/trebuchet/dist/', x: -0.55, z: 0.15, yaw: -0.12, tex: trebuchetTex },
+  { url: isLocal ? 'http://localhost:5174/' : '/cases/newton-cradle/dist/', x: 0.65, z: -0.15, yaw: 0.1, tex: sketchTex },
 ];
 
 const clickableMeshes = [];
