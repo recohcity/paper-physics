@@ -74,7 +74,13 @@ without it -> stop.
 
 ## Workflow
 
+> **Before each numbered step, read the pitfalls that step is known to trigger**
+> (`references/physics-pitfalls.md`). Skim all of them once at intake, then re-read the specific
+> numbered pitfalls below before starting that step. Do not start a step until its listed pitfalls
+> have been read — this is how the accumulated mistakes turn into checkable gates.
+
 0. **Intake. Do not ask questions — start two workstreams in parallel.**
+   - Pitfalls to read before this step: #1, #2, #15.
    - **Workstream A (background, analysis):** parse sketch, materials, requirements; produce (a) a raw requirements list and (b) a numbered list of model/interaction questions to confirm later. Do not block the user on these.
    - **Workstream B (foreground, setup):** immediately copy `template/` to `cases/<slug>/`, drop the user's sketch into `public/`, and boot the shell so that: the project name shows on the panel, **SKETCH** shows the sketch on the A4 sheet, **LIFT** already plays the cutout standing-up animation, zoom/view controls work.
    - **Step gating by readiness (DO NOT hardcode disabled):** the tour step buttons are enabled/disabled dynamically based on what has actually been built:
@@ -85,15 +91,24 @@ without it -> stop.
      - `playTour()` runs through whatever steps are currently available and stops at the first unbuilt step.
    - Once Workstream B is up, use Workstream A's question list to confirm model/interaction details in **batches** (expert-then-yes/no, at most 3 questions per batch).
 1. **Recognition.** Read the sketch part by part. Native vision does the semantic read; output parts / joints / actuators / guides / fields JSON. **Do not ask the user to classify joints** — that is expert work.
+   - Pitfalls: #9, #10.
 2. **Spec + ambiguity confirmation.** Write the Spec, confirm ambiguities as expert-then-yes/no. Only ask about things that change the acceptance target. `scale.status` must be `"OK"` before continuing.
+   - Pitfalls: #2, #14.
 3. **Feasibility gate.** Use the gate of every matching physics domain. Stop and report if it fails.
+   - Pitfalls: #3, #4, #5.
 4. **Reference solution.** Solve the mechanism analytically or with a small integrator.
+   - Pitfalls: #11, #24.
 5. **Scaffold.** Already done by Workstream B. Only `src/mechanism.js` is new.
 6. **Engine build + cross-check.** Build bodies/constraints from the Spec; run `test/verify.mjs` headlessly before handoff.
+   - Pitfalls: #6, #7, #8, #12, #13, #16, #22, #24, #25, #26.
+   - **#26 specifically:** the 2D→3D z-unfold tween must be its own variable, not shared with the material morph. MODEL ends with `scale.z = 2` and spheres read as perfect white-clay spheres before MATERIAL touches materials.
 7. **Sweeps.** Sweep design inputs headlessly.
+   - Pitfalls: #18.
 8. **Interaction.** Direct manipulation, live readouts, slow-mo, replay.
+   - Pitfalls: #17, #19, #20, #21, #23.
 9. **PARTS auto-annotation.** Do NOT ask the user which parts to label. Extract key nodes from the build/interaction and auto-annotate.
 10. **Test + report.** tour and build both run clean; report; on user acceptance, lobby auto-adds the new blueprint card.
+    - Pitfalls: #17, #23.
 
 For auditing an existing project instead of starting from a sketch, skip straight to extracting a Spec
 from the code (`source.kind: "code-extraction"`) and rejoin at step 3.
