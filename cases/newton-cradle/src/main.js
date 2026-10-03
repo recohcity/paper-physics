@@ -1766,6 +1766,7 @@ class App {
             this.trebuchet.setMorphFactor(o.f);
             this.physics.setMorphFactor(o.f);
             this.applyMorphToExtras(o.f);
+            if (this.cradleGroup) this.cradleGroup.scale.set(2, 2, 0.01 + o.f * 2);
             this.morphSlider.value = Math.round(o.f * 100);
           }
         );
