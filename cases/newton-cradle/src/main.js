@@ -274,9 +274,11 @@ class App {
     import('three/addons/loaders/GLTFLoader.js').then(({ GLTFLoader }) => {
       new GLTFLoader().load('cradle.glb', (gltf) => {
         while (this.cradleGroup.children.length) this.cradleGroup.remove(this.cradleGroup.children[0]);
+        gltf.scene.scale.set(1, 1, 1);
         gltf.scene.traverse((o) => {
           if (o.isMesh) {
             o.castShadow = true; o.receiveShadow = true;
+            o.scale.set(1, 1, 1);
             // replace Wood material with trebuchet wood
             if (o.material && o.material.name === 'Wood' && this.trebuchet.woodMat) {
               o.material = this.trebuchet.woodMat;
