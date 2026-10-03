@@ -279,7 +279,7 @@ class App {
             o.castShadow = true; o.receiveShadow = true;
             // balls appear vertically stretched; compress Y to make them round
             if (/ball/i.test(o.name)) {
-              o.scale.y = 0.78;
+              o.scale.y = 0.80;
             }
             // replace Wood material with trebuchet wood
             if (o.material && o.material.name === 'Wood' && this.trebuchet.woodMat) {
