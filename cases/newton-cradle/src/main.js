@@ -1720,15 +1720,15 @@ class App {
 
         await Promise.all([
           tweenPromise(
-            { f: 0.01 },
-            { f: 1.0 },
+            { f: 0.01, z: 0.01 },
+            { f: 0.66, z: 1.0 },
             1800,
             TWEEN.Easing.Cubic.InOut,
             (o) => {
               this.trebuchet.setMorphFactor(o.f);
               this.physics.setMorphFactor(o.f);
               this.applyMorphToExtras(o.f);
-              if (this.cradleGroup) this.cradleGroup.scale.set(2, 2, 0.01 + o.f * 2);
+              if (this.cradleGroup) this.cradleGroup.scale.set(2, 2, o.z * 2);
               this.morphSlider.value = Math.round(o.f * 100);
             }
           ),
@@ -1766,7 +1766,7 @@ class App {
             this.trebuchet.setMorphFactor(o.f);
             this.physics.setMorphFactor(o.f);
             this.applyMorphToExtras(o.f);
-            if (this.cradleGroup) this.cradleGroup.scale.set(2, 2, 0.01 + o.f * 2);
+            if (this.cradleGroup) this.cradleGroup.scale.set(2, 2, 2);
             this.morphSlider.value = Math.round(o.f * 100);
           }
         );
