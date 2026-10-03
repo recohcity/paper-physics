@@ -1,184 +1,170 @@
 import * as THREE from 'three';
 
-// Newton's cradle: analytic pendulum chain (pitfall #24).
-// Each ball hangs from a fixed pivot; theta_i is swing angle.
-// Equal-mass elastic collision between adjacent balls swaps angular velocities.
+// Analytic pendulum chain (pitfall #24). Each ball i: angle theta_i.
+// Equal-mass elastic collision swaps angular velocities.
+// Ropes drawn as LineSegments following ball studs.
 
 export class CradlePhysics {
   constructor(scene) {
     this.scene = scene;
-    this.balls = [];       // THREE.Mesh
-    this.thetas = [];      // swing angle per ball (rad)
-    this.omegas = [];      // angular velocity per ball
-    this.pivots = [];      // world pivot positions (THREE.Vector3)
-    this.L = 0.18;         // pendulum length (m)
+    this.balls = [];
+    this.theta = [];
+    this.omega = [];
+    this.pivots = [];
+    this.L = 0.18;          // pivot to ball center
     this.g = 9.82;
-    this.r = 0.025;        // ball radius
-    this.dragging = -1;    // which ball index is dragged
+    this.airDrag = 0.05;
+    this.r = 0.025;
+    this.dragIndex = -1;
     this.enabled = false;
+    this.strings = [];      // LineSegments per ball
   }
 
   attach(balls) {
     this.balls = balls;
-    this.thetas = balls.map(() => 0);
-    this.omegas = balls.map(() => 0);
-    // pivot = ball rest position + (0, L, 0)
+    this.N = balls.length;
+    this.theta = new Array(this.N).fill(0);
+    this.omega = new Array(this.N).fill(0);
     this.pivots = balls.map((b) => {
       const p = new THREE.Vector3();
       b.getWorldPosition(p);
       return new THREE.Vector3(p.x, p.y + this.L, p.z);
     });
-    // find ropes: 2 per ball (left/right z), named Rope_i_pm in glb
-    this.ropes = balls.map(() => []);
-    this.ballGroup = balls[0].parent;
-    if (this.ballGroup) {
-      this.ballGroup.traverse((o) => {
-        if (/^Rope_(\d+)_([+-]1)$/.test(o.name)) {
-          const m = o.name.match(/^Rope_(\d+)_([+-]1)$/);
-          const i = parseInt(m[1], 10);
-          if (this.ropes[i]) this.ropes[i].push(o);
-        }
-      });
+    // hide glb ropes (they're static)
+    balls[0].parent.traverse((o) => {
+      if (/^Rope_/.test(o.name)) o.visible = false;
+    });
+    // create LineSegments ropes
+    for (let i = 0; i < this.N; i++) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12), 3));
+      const str = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x222222 }));
+      this.scene.add(str);
+      this.strings.push(str);
     }
+    this.updateRopes();
   }
 
-  setEnabled(v) {
-    this.enabled = v;
-  }
+  setEnabled(v) { this.enabled = v; }
 
-  // Drag: given pointer NDC, find which ball is under cursor and set its angle.
-  // groupSize = how many consecutive balls from the left are dragged together.
-  pickAndDrag(pointerNDC, camera, groupSize) {
-    if (!this.balls.length) return -1;
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(pointerNDC, camera);
-    const hits = ray.intersectObjects(this.balls, false);
-    if (!hits.length) return -1;
-    const hitBall = hits[0].object;
-    const idx = this.balls.indexOf(hitBall);
-    if (idx < 0) return -1;
-    this.dragging = idx;
-    // groupSize: drag balls 0..idx together (left-aligned) or idx..4 (right-aligned)?
-    // User rule: click ball k -> control balls 0..k (k+1 balls from left).
-    this.dragGroup = [];
-    if (groupSize >= 1) {
-      for (let i = 0; i <= idx; i++) this.dragGroup.push(i);
-    }
-    return idx;
-  }
-
-  dragMove(pointerNDC, camera) {
-    if (this.dragging < 0 || !this.dragGroup) return;
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(pointerNDC, camera);
-    // intersect with y = pivot plane (approx): find point on ball's swing plane
-    // Just compute angle from pivot to pointer's x, at ball height.
-    const ndc = pointerNDC;
-    // Unproject to a point at ball's z plane
-    const vec = new THREE.Vector3(ndc.x, ndc.y, 0.5).unproject(camera);
-    const dir = vec.sub(camera.position).normalize();
-    const dist = (this.pivots[this.dragging].z - camera.position.z) / dir.z;
-    const px = camera.position.x + dir.x * dist;
-    const py = camera.position.y + dir.y * dist;
-    const pivot = this.pivots[this.dragging];
-    const dx = px - pivot.x;
-    const dy = py - pivot.y;
-    let theta = Math.atan2(dx, -dy);
-    // clamp
-    theta = Math.max(-0.9, Math.min(0.9, theta));
-    for (const i of this.dragGroup) {
-      this.thetas[i] = theta;
-      this.omegas[i] = 0;
-    }
-    this._applyPositions();
-  }
-
-  release() {
-    this.dragging = -1;
-    this.dragGroup = null;
-  }
-
-  step(dt) {
-    if (!this.enabled) return;
-    // Integrate each pendulum (RK-ish, semi-implicit Euler)
-    const sub = 4;
-    const h = dt / sub;
-    for (let s = 0; s < sub; s++) {
-      for (let i = 0; i < this.balls.length; i++) {
-        if (i === this.dragging) continue;
-        const a = -(this.g / this.L) * Math.sin(this.thetas[i]);
-        this.omegas[i] += a * h;
-        this.omegas[i] *= 0.999; // tiny damping
-        this.thetas[i] += this.omegas[i] * h;
-      }
-      // Collisions: adjacent balls
-      for (let i = 0; i < this.balls.length - 1; i++) {
-        if (this._touching(i, i + 1)) {
-          // equal mass elastic: swap angular velocities if approaching
-          const v1 = this.omegas[i];
-          const v2 = this.omegas[i + 1];
-          // approach: ball i moving right (omega>0) and ball i+1 moving left (omega<0)?
-          // theta positive = ball swings right.
-          if ((v1 > 0 && v2 < 0) || (v1 < 0 && v2 > 0)) {
-            this.omegas[i] = v2;
-            this.omegas[i + 1] = v1;
-          }
-        }
-      }
-    }
-    this._applyPositions();
-  }
-
-  _touching(i, j) {
-    const pi = this._ballPos(i);
-    const pj = this._ballPos(j);
-    return pi.distanceTo(pj) <= 2 * this.r * 1.01;
-  }
-
-  _ballPos(i) {
+  ballCenter(i) {
     const p = this.pivots[i];
     return new THREE.Vector3(
-      p.x + this.L * Math.sin(this.thetas[i]),
-      p.y - this.L * Math.cos(this.thetas[i]),
+      p.x + this.L * Math.sin(this.theta[i]),
+      p.y - this.L * Math.cos(this.theta[i]),
       p.z
     );
   }
 
-  _applyPositions() {
-    for (let i = 0; i < this.balls.length; i++) {
-      const pos = this._ballPos(i);
-      this.balls[i].position.copy(pos);
-      // update ropes: each rope goes from pivot top to ball anchor (offset by z)
-      const ropes = this.ropes[i] || [];
-      for (const rope of ropes) {
-        // determine side from name
-        const side = rope.name.endsWith('_1') ? 1 : -1;
-        // top anchor: fixed at pivot x, topY, side*0.04
-        const top = new THREE.Vector3(this.pivots[i].x, this.pivots[i].y, side * 0.04);
-        // bottom anchor: ball center + side*0.015 in z
-        const bottom = new THREE.Vector3(pos.x, pos.y, side * 0.015);
-        // rope is a cylinder; position = midpoint, lookAt direction
-        const mid = top.clone().add(bottom).multiplyScalar(0.5);
-        rope.position.copy(mid);
-        const dir = bottom.clone().sub(top);
-        const len = dir.length();
-        rope.scale.set(1, len, 1); // cylinder height assumed 1 in local? may need fix
-        // orient cylinder along dir (cylinder default is along Y)
-        rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+  pick(raycaster, ndc, camera) {
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects(this.balls, false);
+    return hits.length ? this.balls.indexOf(hits[0].object) : -1;
+  }
+
+  beginDrag(i) {
+    this.dragIndex = i;
+    this.omega[i] = 0;
+  }
+
+  moveDragTo(worldX, worldY) {
+    if (this.dragIndex < 0) return;
+    const p = this.pivots[this.dragIndex];
+    const dy = p.y - worldY;
+    const dx = worldX - p.x;
+    let th = Math.atan2(dx, Math.max(0.02, dy));
+    th = Math.max(-1.2, Math.min(1.2, th));
+    this.theta[this.dragIndex] = th;
+    this.omega[this.dragIndex] = 0;
+    // adjacent touching balls follow
+    for (let d = this.dragIndex - 1; d >= 0; d--) {
+      const a = this.ballCenter(d + 1), b = this.ballCenter(d);
+      if (a.x - b.x < 2 * this.r + 1e-4) this.theta[d] = th; else break;
+    }
+    for (let d = this.dragIndex + 1; d < this.N; d++) {
+      const a = this.ballCenter(d - 1), b = this.ballCenter(d);
+      if (b.x - a.x < 2 * this.r + 1e-4) this.theta[d] = th; else break;
+    }
+    this.updateMeshes();
+  }
+
+  endDrag() { this.dragIndex = -1; }
+
+  step(dt) {
+    if (!this.enabled) return;
+    const sub = 4;
+    const h = dt / sub;
+    for (let s = 0; s < sub; s++) {
+      for (let i = 0; i < this.N; i++) {
+        if (i === this.dragIndex) continue;
+        const acc = -(this.g / this.L) * Math.sin(this.theta[i]) - this.airDrag * this.omega[i];
+        this.omega[i] += acc * h;
+        this.theta[i] += this.omega[i] * h;
+      }
+      this.resolveContacts();
+    }
+    this.updateMeshes();
+  }
+
+  resolveContacts() {
+    for (let iter = 0; iter < 2; iter++) {
+      for (let i = 0; i < this.N - 1; i++) {
+        const a = this.ballCenter(i), b = this.ballCenter(i + 1);
+        const dx = b.x - a.x;
+        if (dx < 2 * this.r) {
+          const vi = this.L * this.omega[i];
+          const vj = this.L * this.omega[i + 1];
+          const closing = vi - vj;
+          if (closing > 0) {
+            // equal mass, e=0.92: swap velocities
+            const e = 0.92;
+            const nvi = ((1 - e) * vi + (1 + e) * vj) / 2;
+            const nvj = ((1 + e) * vi + (1 - e) * vj) / 2;
+            this.omega[i] = nvi / this.L;
+            this.omega[i + 1] = nvj / this.L;
+          }
+          const overlap = 2 * this.r - dx;
+          this.theta[i] -= overlap / this.L * 0.5;
+          this.theta[i + 1] += overlap / this.L * 0.5;
+        }
       }
     }
   }
 
   reset() {
-    this.thetas = this.balls.map(() => 0);
-    this.omegas = this.balls.map(() => 0);
-    this._applyPositions();
+    this.theta.fill(0);
+    this.omega.fill(0);
+    this.updateMeshes();
   }
 
-  // Auto-play: lift leftmost ball and release
   autoPlay() {
     this.reset();
-    this.thetas[0] = 0.6;
-    this.omegas[0] = 0;
+    this.theta[0] = 0.6;
+    this.omega[0] = 0;
+  }
+
+  updateMeshes() {
+    for (let i = 0; i < this.N; i++) {
+      this.balls[i].position.copy(this.ballCenter(i));
+    }
+    this.updateRopes();
+  }
+
+  updateRopes() {
+    for (let i = 0; i < this.N; i++) {
+      const c = this.ballCenter(i);
+      const p = this.pivots[i];
+      // V-strings: top anchors at p.x±0.012, z=p.z; ball studs at c.z±0.008
+      const topA = new THREE.Vector3(p.x - 0.012, p.y, p.z);
+      const topB = new THREE.Vector3(p.x + 0.012, p.y, p.z);
+      const studA = new THREE.Vector3(c.x, c.y - this.r, c.z + 0.008);
+      const studB = new THREE.Vector3(c.x, c.y - this.r, c.z - 0.008);
+      const arr = this.strings[i].geometry.attributes.position.array;
+      arr.set([
+        topA.x, topA.y, topA.z, studA.x, studA.y, studA.z,
+        topB.x, topB.y, topB.z, studB.x, studB.y, studB.z,
+      ]);
+      this.strings[i].geometry.attributes.position.needsUpdate = true;
+    }
   }
 }

@@ -2424,6 +2424,7 @@ class App {
     this.renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
     // Cradle ball dragging
+    this._cradleRay = new THREE.Raycaster();
     this.renderer.domElement.addEventListener('pointerdown', (e) => {
       if (!this.cradlePhys || !this.cradlePhys.enabled) return;
       if (this.isTourRunning) return;
@@ -2432,10 +2433,11 @@ class App {
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
         -((e.clientY - rect.top) / rect.height) * 2 + 1
       );
-      const idx = this.cradlePhys.pickAndDrag(ndc, this.camera, true);
+      const idx = this.cradlePhys.pick(this._cradleRay, ndc, this.camera);
       if (idx >= 0) {
-        this.controls.enabled = false;
+        this.cradlePhys.beginDrag(idx);
         this._cradleDragging = true;
+        this.controls.enabled = false;
       }
     });
     window.addEventListener('pointermove', (e) => {
@@ -2445,11 +2447,18 @@ class App {
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
         -((e.clientY - rect.top) / rect.height) * 2 + 1
       );
-      this.cradlePhys.dragMove(ndc, this.camera);
+      this._cradleRay.setFromCamera(ndc, this.camera);
+      // intersect z = ball pivot plane
+      const p = this.cradlePhys.pivots[this.cradlePhys.dragIndex];
+      const dir = this._cradleRay.ray.direction;
+      const t = (p.z - this._cradleRay.ray.origin.z) / dir.z;
+      const wx = this._cradleRay.ray.origin.x + dir.x * t;
+      const wy = this._cradleRay.origin.y + dir.y * t;
+      this.cradlePhys.moveDragTo(wx, wy);
     });
     window.addEventListener('pointerup', () => {
       if (this._cradleDragging) {
-        this.cradlePhys.release();
+        this.cradlePhys.endDrag();
         this._cradleDragging = false;
         this.controls.enabled = true;
       }
