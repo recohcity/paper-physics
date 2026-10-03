@@ -180,3 +180,17 @@ the momentum-wave behaviour. Leaving a deliberate gap to stop the solver injecti
 contact is papering over a model error: it changes the physical layout the user drew.
 **Rule:** place bodies in their true resting contact. If the solver injects energy at rest contact,
 fix the solver/time-step or the contact model — do not move the geometry apart to hide it.
+
+## 26. The 2D→3D z-unfold must not share its progress with the material morph
+
+The tour animates a sketch that "lifts off" the paper and unfolds along Z (`scale.z: 0 → 2`) while
+also fading the white-clay material into the real texture. If the same tween `f` drives both, and the
+MODEL step stops at `f=0.66` (white-clay threshold) while MATERIAL continues `f: 0.66 → 1.0`, then
+`scale.z = 0.01 + f·2` lands at `1.33` at the end of MODEL — spheres look squashed along Z and the
+user reports "the ball is not round". The MATERIAL step's onUpdate often forgets to set `scale` at
+all, so the wrong Z value sticks.
+**Rule:** track the Z-unfold progress as its own tween variable. MODEL must end with `scale.z = 2`
+(spheres truly round) while the material stays white-clay; MATERIAL only swaps materials, never
+re-touches scale. Verify on the white-clay step that balls read as perfect spheres before approving
+the model.
+
