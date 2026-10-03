@@ -18,6 +18,7 @@ import { TrebuchetModel } from './trebuchet.js';
 import { Environment } from './environment.js';
 import { TrajectoryAnnotations } from './annotations.js';
 import { sound } from './audio.js';
+import { CradlePhysics } from './cradle-physics.js';
 
 class App {
   constructor() {
@@ -277,6 +278,11 @@ class App {
         gltf.scene.traverse((o) => {
           if (o.isMesh) {
             o.castShadow = true; o.receiveShadow = true;
+            // collect Ball meshes for cradle physics
+            if (/ball/i.test(o.name)) {
+              this.cradlePhysicsBalls = this.cradlePhysicsBalls || [];
+              this.cradlePhysicsBalls.push(o);
+            }
             // balls: keep original scale (re-exported from Blender)
             // replace Wood material with trebuchet wood
             if (o.material && o.material.name === 'Wood' && this.trebuchet.woodMat) {
@@ -290,6 +296,14 @@ class App {
           }
         });
         this.cradleGroup.add(gltf.scene);
+        // Attach cradle physics after glb added to scene (world positions valid)
+        this.cradlePhys = new CradlePhysics(this.scene);
+        if (this.cradlePhysicsBalls && this.cradlePhysicsBalls.length === 5) {
+          // sort by x ascending (left to right)
+          this.cradlePhysicsBalls.sort((a, b) => a.position.x - b.position.x);
+          this.cradlePhys.attach(this.cradlePhysicsBalls);
+          this.cradlePhys.setEnabled(true);
+        }
       });
     });
 
@@ -2408,6 +2422,38 @@ class App {
     };
 
     this.renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+    // Cradle ball dragging
+    this.renderer.domElement.addEventListener('pointerdown', (e) => {
+      if (!this.cradlePhys || !this.cradlePhys.enabled) return;
+      if (this.isTourRunning) return;
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      const idx = this.cradlePhys.pickAndDrag(ndc, this.camera, true);
+      if (idx >= 0) {
+        this.controls.enabled = false;
+        this._cradleDragging = true;
+      }
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!this._cradleDragging || !this.cradlePhys) return;
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      this.cradlePhys.dragMove(ndc, this.camera);
+    });
+    window.addEventListener('pointerup', () => {
+      if (this._cradleDragging) {
+        this.cradlePhys.release();
+        this._cradleDragging = false;
+        this.controls.enabled = true;
+      }
+    });
   }
 
   animate() {
@@ -2429,6 +2475,7 @@ class App {
     // Step physics
     this.physics.step(delta);
     this.physics.updateBlockHitVisuals();
+    if (this.cradlePhys) this.cradlePhys.step(delta);
     // Rope follows the beam ring every frame (shortens while cocking, lengthens
     // while the arm rebounds after release)
     this.trebuchet.ropeUpdate();
