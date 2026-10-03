@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] — 多 case 大厅架构 + 牛顿摆端到端压测 + skill 双工作线（2026-10-03）
+
+### 架构
+- **多 case 目录结构**：`cases/trebuchet/`、`cases/newton-cradle/`、`cases/lobby/` 平级独立 vite 项目
+- **大厅首页**：桌面场景两张图纸（投石机/牛顿摆），hover 浮起，点击跳转对应模型
+- **Vercel 多页部署**：`vercel.json` 配置 build + rewrite，大厅 `/`、模型 `/trebuchet/`、`/newton-cradle/`
+
+### 牛顿摆（newton-cradle）
+- Blender MCP 建模：U 型木结构一体、L 形金属挂片、5 金属球、无弹性绳
+- Tour 四阶段：SKETCH → LIFT（cutout 立起）→ MODEL（scale.z 0→2 拉宽）→ MATERIAL
+- 环境贴图：GSG_PRO_STUDIOS_METAL_016_sm.exr + PMREMGenerator
+- 笔/橡皮擦 visible 绑定图纸（show/hidePaperSketch 联动）
+
+### skill 双工作线
+- **Workstream A**（后台）：分析图纸+需求，生成问题清单
+- **Workstream B**（前台）：立即起 template，SKETCH/LIFT 可见，其他按钮按 readiness 动态启用
+- Step gating：SKETCH/LIFT 始终可用，MODEL/MATERIAL/PARTS/PLAY/REPLAY/BUILD 按完成度启用
+
+### 公共素材标准化
+- 桌面/木纹/灯光/env.exr/铅笔/橡皮擦 100% 复用 template
+- 音效复用（playPickup/playDrop/playPaperSlide）
+
 ## [0.1.3] — skill 全量一致性审计 + 代码限位/注释核清 + 全对象碰撞音效（2026-10-02）
 
 ### skill 一致性审计（12 文件，术语与证据全部对齐物理域架构）

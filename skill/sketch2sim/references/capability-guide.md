@@ -5,7 +5,7 @@ tool, which physics domain(s) apply, how deep to restore the physics, and how st
 
 ## Positioning: 入口开放，模块指定
 
-- **入口开放**：任何草图（投石机、机械臂、磁石装置、折叠机构、历史图纸……）都能进入通用管线——
+- **入口开放**：任何草图（连杆机构、机械臂、场力装置、折叠机构、历史图纸……）都能进入通用管线——
   识别 → 白模 → 材质模型 → 物理装配 → 交互。通用管线不挑设备。
 - **模块指定**：物理层按「物理域模块」按需挂载（`references/mechanism-templates.md`）——每个域提供
   gate + 参考实现 + 工具链，可组合。设备只是域模块的组合实例，不是模板。
@@ -26,8 +26,8 @@ with provenance, not a pretty model. See `SKILL.md` for the full workflow (steps
 | L0 | 几何白模（识别+尺度+3D） | 全通用 | 任何草图 |
 | L1 | 材质模型（渲染） | 全通用 | 任何草图 |
 | L2 | 运动学（关节/自由度/约束/正逆解） | 通用数学（D-H/旋量/雅可比） | 机械臂正逆运动学 |
-| L3 | 刚体动力学（力/力矩/能量） | 通用（拉格朗日+RK4，`mech2d.mjs`） | 投石机发射 |
-| L4 | 摩擦/碰撞/阻尼（接触物理） | 引擎通用（cannon-es） | 方块击倒、球滚动 |
+| L3 | 刚体动力学（力/力矩/能量） | 通用（拉格朗日+RK4 参考解算器） | 抛射/举升/平衡类机构 |
+| L4 | 摩擦/碰撞/阻尼（接触物理） | 通用刚体引擎 | 堆积、滚动、冲击 |
 | L5 | 场/驱动/控制 | **每引入一个新物理域才加模块** | 磁悬浮、电机机械臂 |
 
 还原物理特性是**选择性地引入真实物理效应**（摩擦、阻尼、弹性、场、驱动），不是无中生有；装饰性
@@ -39,8 +39,8 @@ Check `references/mechanism-templates.md` for the current catalog. 摘要：
 
 | 域模块 | 覆盖 | Gate 形状 | 工具链 | 状态 |
 |---|---|---|---|---|
-| `rigid_linkage` | 投石机、机械臂、折叠机构、连杆 | 数值型：静平衡+能量预算 | 完整（mech2d/cannon/sweep/search_fix） | 投石机已验证；机械臂=多体组合压测 |
-| `field_force` | 磁/静电/引力场 | 结构型：单调场闸门（存在性证明） | 无需数值工具 | Wilkins 永动机已出结论 |
+| `rigid_linkage` | 抛射机构、多关节臂、折叠机构、连杆 | 数值型：静平衡+能量预算 / 逐关节力矩包络 | 参考解算器+引擎交叉验证+扫描 | 已在存储释放类机构与单臂案例压测 |
+| `field_force` | 磁/静电/引力场 | 结构型：单调场闸门（存在性证明） | 无需数值工具 | 已用单调场存在性证明定案 |
 | `track_guided` | 斜面/滑槽/滑轮 | 待沉淀 | 通用刚体引擎 | 常组合出现 |
 | `control` / `elastic` / `hydro_aero` / … | 驱动控制 / 弹性 / 流体 | 未实现 | — | 未来域，遇新物理理论再沉淀 |
 
@@ -86,15 +86,14 @@ Check `references/mechanism-templates.md` for the current catalog. 摘要：
 
 ## Current maturity (what is still not proven)
 
-- **A sketch that runs end to end through steps 2 onward** (ambiguity confirmation → Spec → build) has not
-  happened yet: paper-trebuchet was always code-extraction; the Wilkins case resolved at step 3 without
-  needing steps 2+. The next feasible design handed as a sketch will be the first full run.
-- **Overlay fidelity check** (render the build from the sketch's view and diff against it) is designed in
-  principle but not built.
-- **A genuinely new numeric gate** beyond the trebuchet family has not been exercised (both cases so far are
-  scale-invariant in opposite ways).
-- **Multi-body composition** (robot arm: `rigid_linkage` × N + a new `control` domain) is the planned next
-  pressure test — it will be the first case that combines domains and needs L2 kinematics math.
+- **A sketch that runs end to end through steps 2 onward** (ambiguity confirmation → Spec → build)
+  has not happened yet: prior cases ran partly from extracted code or resolved at the gate without
+  needing steps 2+. The next design handed as a sketch will be the first full run.
+- **Overlay fidelity check** (render the build from the sketch's view and diff against it) is designed
+  in principle but not built.
+- **Genuinely new gates** beyond the existing families have been exercised only sparsely.
+- **Multi-domain composition** (e.g. a multi-joint arm: `rigid_linkage` × N × `control`) is the planned
+  next pressure test — it is the first case that combines domains and needs L2 kinematics math.
 - Everything validated is **single-case**; the checklist generalizes only as far as the audits it survived.
 
 When in doubt about whether this skill fits a sketch, say what you can validate and what you cannot, and

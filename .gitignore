@@ -37,3 +37,18 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+
+
+
+
+# Local working artifacts and feedback docs (not for the repo)
+artifacts/
+docs/
+
+# Cases: push production cases, ignore old refs and archives
+cases/_old-*/
+cases/archive/
+cases/*/node_modules/
+cases/*/dist/
+cases/*/.env*

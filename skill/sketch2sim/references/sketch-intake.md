@@ -55,9 +55,14 @@ produce it — Claude writes it directly from looking at the image(s)):
       "path_px": { "view": "front", "points": [[0,0]] }, "confidence": 0.0 }
   ],
   "fields": [
-    { "id": "lodestone_field", "source_part": "lodestone", "acts_on": ["ball"],
+    { "id": "field_1", "source_part": "field source", "acts_on": ["ball"],
       "kind_guess": "magnetic_attraction | gravity | electrostatic", "monotonicity": "decreasing_with_distance",
       "confidence": 0.0 }
+  ],
+  "actuators": [
+    { "id": "shoulder_motor", "drives_joint": "J2", "kind_guess": "stepper | servo | dc_gearmotor | none",
+      "rated_torque_Nm_guess": null, "gear_ratio_guess": null, "parallel_count": 1,
+      "confidence": 0.0, "note": "what drives this joint and through what reduction; feasibility of an arm lives here" }
   ],
   "ambiguities": []
 }
@@ -115,6 +120,11 @@ Turn `ambiguities[]` into questions the user actually answers — this is what m
   report per the provenance rules in `spec-schema.md` — never silently upgraded to `declared`.
 - Do not ask about anything above the 0.8 confidence threshold; re-litigating high-confidence reads wastes
   the user's attention and teaches them to stop reading the questions.
+- One round, at most three questions. Expert decisions (joint type, mass/inertia estimate, how a part
+  physically moves) are yours — never hand them to the user.
+- The one thing that must be pinned before anything else is **what success looks like** ("throw far",
+  "hold this load", "place accurately" — these need different gates). If the user cannot state it, stop
+  and ask that first; everything downstream depends on it.
 - After this round, `scale.status` must be `"OK"` (anchor confirmed) before writing the rest of the Spec —
   everything else can proceed with `assumed` entries, scale cannot.
 
@@ -130,5 +140,5 @@ changes based on where the Spec came from.
 - **Overlay fidelity check** (render the 3D build from the same view, diff against the sketch) is still
   planned, not built. It is a separate, later step (after step 5, engine build) — it checks the *build*
   against the *sketch*, not the recognition pass against anything. Do not conflate the two.
-- This procedure has not been run end-to-end on a real sketch yet (paper-trebuchet's Spec was always
-  code-extracted). Treat it as a first draft to be corrected by that first real run, not as validated.
+- This procedure has not been run end-to-end on a real sketch yet (prior Specs were extracted from
+  code). Treat it as a first draft to be corrected by that first real run, not as validated.

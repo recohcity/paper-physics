@@ -1,7 +1,8 @@
 # Spec schema v0
 
 One JSON file describes the design. Sketch textures, 3D geometry, physics bodies, UI ranges and the report
-are all generated from it. Full worked example: `examples/trebuchet.spec.json`.
+are all generated from it. A full worked example lives in the project that stress-tested this skill
+(see that project's feedback directory), not in the skill itself.
 
 ## Provenance (required on every quantity that affects dynamics)
 
@@ -27,8 +28,15 @@ are all generated from it. Full worked example: `examples/trebuchet.spec.json`.
 - `parts[]`: id, shape (primitive, extruded contour with `thickness`, or lathe), dimensions, material id,
   `role` (`fixed | moving | payload | target`)
 - `materials[]`: id, density, friction/restitution pairs (`provenance` each)
-- `joints[]`: id, type (`hinge | slider | fixed | ball`), parts, axis, anchor points, limits, `provenance`
-  (joint types are the most ambiguous thing in a 2D drawing; default to `assumed` and ask)
+- `joints[]`: id, type (`hinge | slider | fixed | ball | revolute | prismatic`), parts, axis, anchor points, limits, `provenance`
+  (joint types are the most ambiguous thing in a 2D drawing; default to `assumed` and ask). Revolute/prismatic joints
+  in a `control`-domain device additionally record which actuator drives them (see `actuators[]`) and angular limits
+  in degrees.
+- `actuators[]`: for motor/servo/stepper-driven joints (`control` domain). id, `joint` it drives, motor model,
+  `rated_torque_Nm` (or rated force for prismatic), `gear_ratio`, `efficiency`, each with `provenance`. A joint may be
+  driven by several actuators in parallel (e.g. two steppers on one shoulder). `gear_ratio` is frequently `assumed`
+  (teeth not counted from a drawing) and is **load-bearing**: while it is `assumed`, a feasibility verdict is blocked
+  per the provenance table and the margin must be reported as a function of the ratio.
 - `guides[]`: id, the payload part it constrains, the track/channel part providing the surface, and a rough
   path (points or curve description) in scene units. Use for a part that follows a fixed surface under its
   own dynamics (ramp, chute, rail) rather than being pinned to it — do not encode these as `joints`.

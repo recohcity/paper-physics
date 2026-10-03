@@ -1,218 +1,181 @@
 ---
 name: sketch2sim
 description: >-
-  Turn a hand-drawn sketch or drawing of a mechanism, product or structure into an interactive 3D model
-  with physics, and validate whether the design is physically feasible before it is built. 中文触发词：
-  草图转仿真、图纸验证、机构可行性验证、物理演示审计、投石机/杠杆/连杆/铰链/抛射类机构“能不能动起来、
-  能不能把东西扔出去、结构稳不稳”的验证，现有物理 demo 的物理真实性审计，sketch to sim / mechanism
-  validation / physics demo audit。Use when the user wants a sketch, blueprint or concept drawing "brought
-  to life", wants a mechanism (levers, linkages, launchers, hinges, stability, impact) validated visually
-  and interactively, or wants an existing physics demo audited for physical validity. Not for
-  strength/fatigue/thermal/fluid analysis (needs FEA) and not for purely decorative 3D.
+  Turn a hand-drawn sketch / photo of a mechanism, product or structure into an interactive 3D model
+  with physics, and say whether it actually works. 面向普通用户的简洁触发词：画个机器、帮我做出来、
+  把这张图变成 3D、这个能不能动、这个稳不稳、投石机/投石车/永动机/牛顿摆/机械臂/小发明 做个动画、
+  这图纸能造吗。面向专业用户的触发词：草图转仿真、机构可行性验证、物理 demo 真实性审计、
+  刚体动力学快速验证、杠杆/连杆/铰链/抛射/升降/夹持机构。Use when the user uploads a sketch,
+  blueprint or photo of a device and wants it brought to life in 3D with physics, or wants to know
+  whether it can physically work. Not for strength/fatigue/thermal/fluid FEA, nor purely decorative 3D.
 ---
 
 # sketch2sim
 
-Sketch -> Spec -> 3D model -> physics -> interactive validation. The value is not the 3D model; it is a
-**checkable Spec** and a **feasibility verdict that can be trusted**. A model that looks right but cannot
-physically work is worse than no model, because it will be believed.
+Sketch -> Spec -> 3D model -> physics -> interactive validation. The deliverable is not the 3D model;
+it is a **checkable Spec** and a **feasibility verdict that can be trusted**. A model that looks right
+but cannot physically work is worse than no model, because the user will believe it.
+
+## Who the user is
+
+The user brings intent + a drawing, not a specification. They often have no engineering, mechanical or
+motor background. Treat the request as an expert engineer would: make the professional judgment, and
+only hand back the decisions that are genuinely theirs. Never hide behind "the user said X" to ship a
+fake build.
 
 ## Non-negotiable principles
 
-1. **The Spec is the contract.** Sketch textures, 3D geometry and physics bodies are all generated from one
-   Spec. Never hand-write the same dimension in two places.
-2. **Every physical quantity carries provenance**: `declared` (user said so), `measured` (from the sketch, with
-   scale anchor), `derived` (computed from others), `assumed` (the agent's guess, user must see it), or `fitted`
-   (tuned to look right). `fitted` quantities may exist only in a demonstration-grade build and must be
-   listed in the report. A verdict of "feasible" is forbidden while any load-bearing quantity is `fitted`.
-3. **Mechanism dynamics come from bodies, joints and masses, never from a hand-written formula.** If changing
-   an arm length in the Spec does not change the result, the model is not validating anything.
-4. **Run the feasibility gate before building UI** (below). It takes minutes and catches designs that cannot work.
-5. **State what is not modeled.** Rigid-body physics does not cover strength, fatigue, material flex, heat,
-   fluids or manufacturing tolerance. Say so in every report.
-6. **Respect natural mechanics; never fake it with guard code.** A "cannot fire / not ready / inverted"
-   state must come from real torques, masses and collision limits — the default parameter set is what keeps
-   the mechanism ready (driver torque > payload torque), not a logic lock. If the player's combination makes
-   the beam tilt the wrong way, let it tilt: the physics decides throwability. The only acceptable hard stops
-   are collision behaviours (arm-to-chassis, cup-to-deck).
-7. **Decorative parts are visual-follow, never force-follow.** Ropes, winches, drums, hand cranks, dials and
-   indicators must not transmit force and must not carry a collider that touches the throw. Their motion is a
-   kinematic mapping of a real state (arm angle -> rope length / drum rotation / direction sign). Changing a
-   decorative part must not change any launch readout (checklist T6).
+1. **The Spec is the contract.** Sketch textures, 3D geometry and physics bodies are all generated from
+   one Spec. Never hand-write the same dimension in two places.
+2. **Every physical quantity carries provenance**: `declared` (user said so), `measured` (from the
+   sketch, with scale anchor), `derived` (computed from others), `assumed` (your best guess, user must
+   see it), or `fitted` (tuned to look right). `fitted` may exist only in a demonstration-grade build
+   and must be listed. A verdict of "feasible" is forbidden while any load-bearing quantity is `fitted`.
+3. **Dynamics come from bodies, joints and masses, never a hand-written formula.** If changing an arm
+   length in the Spec does not change the result, the model is validating nothing.
+4. **Run the feasibility gate before building UI.** It takes minutes and catches designs that cannot work.
+5. **State what is not modeled.** Rigid-body physics does not cover strength, fatigue, material flex,
+   heat, fluids or manufacturing tolerance. Say so in every report.
+6. **Never fake mechanics with guard code.** A "cannot move / not ready" state must come from real
+   torques, masses and collision limits, not a logic lock. If the player's combination makes the beam
+   tilt the wrong way, let it tilt: physics decides. The only hard stops are collision behaviours.
+7. **Three object roles, not two.** Classify every object at build time:
+   - *Dynamic actor* — moves and transmits force (the lever, arm, projectile): real body, joints, mass.
+   - *Static world prop* — anything that just sits there (ceiling bar, base, pencil, eraser, table edge,
+     walls). It does not drive anything and has no actuator, but it IS solid: a moving body that reaches it
+     must collide and be blocked. Static props get a real static collider in the same commit as their mesh.
+     "Decorative" never means "no collider" — it means "it does not move, but it still blocks you".
+   - *Visual-follow* — purely mappings of a dynamic state (a rope drawn between anchor and ball, a dial
+     needle): kinematic, no independent body, and must never alter any readout.
+8. **Every object carries its full physics from the moment it is built — the user must never be the
+   tester.** When a mesh is created, its role above is decided in the same commit and the matching physics
+   is attached immediately: a dynamic actor gets correct mass/joints; a static world prop gets a real
+   collider (the action can hit it); a rope/link uses the physically correct constraint type from the start
+   (not a placeholder you will "fix later"); a visual-follow part is explicitly classified as such. No object
+   ships as "visual only by accident". Before handoff, run a headless self-check (node or screenshot) proving:
+   nothing passes through a static prop, the rest state settles as drawn, and the intended action fires. The
+   user finding a ball clipping through the ceiling bar, a body hanging upside-down, or a prop silently not
+   blocking means the build was delivered unfinished — treat that as your error, not their feedback.
 
-## Workflow (local / Claude Code route)
+## Decision ownership (who decides what)
 
-0. **Intake.** Before anything else, run the view-requirements checklist in `references/sketch-intake.md`
-   part A: how many views, scale anchor, legibility. Ask for what's missing in one message; do not start
-   recognition on an image that fails the legibility or scale-anchor checks. Also ask what should be
-   validated and which parts move.
-1. **Read the sketch part by part.** Follow `references/sketch-intake.md` part B: Claude's own vision does
-   the semantic read (what each part is, where joints probably are) and produces the parts/joints/ambiguities
-   JSON directly — no separate CV script. A script only does arithmetic downstream (pixel-to-metre, Spec
-   assembly), never the recognition itself.
-2. **Write the Spec** (`references/spec-schema.md`). Follow `references/sketch-intake.md` part C: turn the
-   ambiguities from step 1 into batched, guess-first questions and get the user to confirm or correct them.
-   `scale.status` must be `"OK"` before continuing. Anything left unanswered becomes an `assumed` entry.
-3. **Feasibility gate** (next section). Stop and report if it fails.
-4. **Reference solution.** Solve the mechanism analytically or with a small custom integrator
-   (`scripts/mech2d.mjs` is the pattern: Lagrangian, RK4, energy-drift check). This is ground truth for step 5.
-5. **Engine build and cross-check.** Build bodies and constraints from the Spec (Three.js + Cannon-es). For
-   the rigid_linkage domain (the hinged-lever build), run the Cannon-es build and the reference solver on the same inputs and require
-   agreement within ~5% on launch speed and angle: `scripts/cannon_trebuchet.mjs` (single point) and
-   `scripts/xcheck_suite.mjs` (regression suite, grids generated from the Spec's input ranges — re-run
-   whenever those ranges change, old passes do not carry over, `physics-pitfalls.md` #18). Any larger gap
-   means a modeling or engine-setup bug — see `references/physics-pitfalls.md` items 12-13 for the two bugs
-   this caught, and item where a widened range exposed a genuine ~2 degree engine release-angle bias that was
-   reported as FAIL rather than masked. The 5% gate covers the engine build vs the reference solver (both
-   240 Hz fixed-step); a browser build that samples release on 60 Hz rAF frames carries ~±7% sampling bias
-   and needs its own baseline (checklist V2 note). For a new physics domain, write its reference solver
-   and engine build first; the cross-check is what makes the engine trustworthy, so do not skip it.
-6. **Sweeps.** Sweep the design inputs headlessly (`scripts/sweep_trebuchet.mjs`, grids generated from the
-   Spec), find sensitivity and failure regions, and search for parameter changes that fix a failing design
-   (`scripts/search_fix.mjs`).
-7. **Interaction and instruments.** Direct manipulation (drag = temporary override, release = hand back to
-   dynamics), input ranges derived from geometry, live readouts, slow motion, replay, view presets. For
-   tours, part labels, hotspots and any scene prop the user can interact with, run checklist items T1-T7
-   (anchors from real mesh positions, deterministic label layout, explicit step end conditions, static end
-   state, real colliders for every scene prop, decorative parts decoupled from dynamics, compound gestures
-   complete in one pointer session). Before slow-mo/replay demos, run P7 (staged collision activation for
-   a projectile that starts overlapping the launcher) and the event-driven replay end condition (T3,
-   pitfall 23).
-8. **Code architecture.** Keep one runtime source of truth (`src/spec.js` pattern: physics / 3D / UI read
-   the same module that mirrors the Spec), split controller files that exceed ~800 lines, and remove stale
-   comments and temp hooks. Run `references/architecture-checklist.md`; a refactor must not move the physics
-   numbers (re-run the cross-check and a browser launch before/after).
-9. **Report** using the template below. Export `spec.json` next to the build.
+The failure mode this prevents: the user's vague intent is treated as a spec, the skill fills the gaps
+with silent guesses, and a plausible-but-wrong model is produced. Cut every decision into one of three:
 
-Steps 0-2 are the only ones that differ when auditing an existing project instead of starting from a sketch:
-skip straight to extracting a Spec from the code (`source.kind: "code-extraction"`, see "Auditing an existing
-demo" below) and rejoin at step 3.
+| Category | Examples | Owner | If wrong |
+|---|---|---|---|
+| **Expert decides** (never ask) | which physics domain(s) apply, joint type, mass/inertia estimate, which gate, the arithmetic, how a part physically moves | the skill | record as `assumed`, overturnable |
+| **Must ask the user** | what exactly is being validated (thrown far? held up? placed accurately?), which parts move vs fixed, acceptance target (payload mass / hit point), trade-offs between incompatible goals | the user | ask once, in one batch |
+| **Must stop** (do not push through) | no scale anchor, gate fails, a load-bearing quantity can only be `fitted`, the request conflicts with physics | the skill halts and reports | report numbers, propose options |
 
-## Scripts (all are domain-specific: rigid_linkage / hinged-lever family)
+Rule of thumb: if a wrong answer changes the verdict or safety **and the user can answer it** -> ask;
+if the user cannot answer it -> decide as expert and mark `assumed`; if the whole task cannot stand
+without it -> stop.
 
-- `scripts/mech2d.mjs` — rigid reference solver (Lagrangian 2-DOF + RK4), exports `simulate()` and `fitted()`.
-- `scripts/sweep_trebuchet.mjs` — feasibility sweeps; grids read from the Spec's `mass_range`/`default_mass`
-  and `counterweight_kg`/`ball_kg` inputs, so a range change re-runs correctly without editing the script.
-- `scripts/search_fix.mjs` — grid search for parameter changes that hit the Spec target.
-- `scripts/cannon_trebuchet.mjs` — Cannon-es hinge build, single-point cross-check vs `mech2d.mjs` (V2).
-- `scripts/xcheck_suite.mjs` — V2 regression suite: the original audit-fix variants (regression history) plus
-  a product-range family generated from the Spec. Requires `cannon-es`; install it outside the skill and run
-  with `NODE_PATH`, e.g. `mkdir -p /tmp/cannon-xcheck && cd /tmp/cannon-xcheck && npm init -y && npm install
-  cannon-es`, then `NODE_PATH=/tmp/cannon-xcheck/node_modules node scripts/xcheck_suite.mjs
-  examples/trebuchet.spec.json`.
-- New physics domains need their own reference solver and engine build; these scripts do not transfer.
+## Workflow
 
-## Feasibility gate (do this first, cheap and decisive)
+0. **Intake. Do not ask questions — start two workstreams in parallel.**
+   - **Workstream A (background, analysis):** parse sketch, materials, requirements; produce (a) a raw requirements list and (b) a numbered list of model/interaction questions to confirm later. Do not block the user on these.
+   - **Workstream B (foreground, setup):** immediately copy `template/` to `cases/<slug>/`, drop the user's sketch into `public/`, and boot the shell so that: the project name shows on the panel, **SKETCH** shows the sketch on the A4 sheet, **LIFT** already plays the cutout standing-up animation, zoom/view controls work.
+   - **Step gating by readiness (DO NOT hardcode disabled):** the tour step buttons are enabled/disabled dynamically based on what has actually been built:
+     - SKETCH + LIFT always available (template ships them).
+     - MODEL enabled only after the white 3D model is loaded.
+     - MATERIAL enabled only after materials are assigned.
+     - PARTS / PLAY / REPLAY / BUILD enabled as soon as any part of the model can move and be interacted with (even a simple drag).
+     - `playTour()` runs through whatever steps are currently available and stops at the first unbuilt step.
+   - Once Workstream B is up, use Workstream A's question list to confirm model/interaction details in **batches** (expert-then-yes/no, at most 3 questions per batch).
+1. **Recognition.** Read the sketch part by part. Native vision does the semantic read; output parts / joints / actuators / guides / fields JSON. **Do not ask the user to classify joints** — that is expert work.
+2. **Spec + ambiguity confirmation.** Write the Spec, confirm ambiguities as expert-then-yes/no. Only ask about things that change the acceptance target. `scale.status` must be `"OK"` before continuing.
+3. **Feasibility gate.** Use the gate of every matching physics domain. Stop and report if it fails.
+4. **Reference solution.** Solve the mechanism analytically or with a small integrator.
+5. **Scaffold.** Already done by Workstream B. Only `src/mechanism.js` is new.
+6. **Engine build + cross-check.** Build bodies/constraints from the Spec; run `test/verify.mjs` headlessly before handoff.
+7. **Sweeps.** Sweep design inputs headlessly.
+8. **Interaction.** Direct manipulation, live readouts, slow-mo, replay.
+9. **PARTS auto-annotation.** Do NOT ask the user which parts to label. Extract key nodes from the build/interaction and auto-annotate.
+10. **Test + report.** tour and build both run clean; report; on user acceptance, lobby auto-adds the new blueprint card.
 
-**The gate shape depends on the physics domain** — check `references/mechanism-templates.md` and use the
-gate of every domain the sketch matches (a device may combine several). The rigid_linkage gate below is the
-one for anything that stores energy and throws, lifts or moves something:
+For auditing an existing project instead of starting from a sketch, skip straight to extracting a Spec
+from the code (`source.kind: "code-extraction"`) and rejoin at step 3.
 
-- **Static balance:** at the start pose and along the travel, is the net torque of the driver larger than
-  the opposing torque of the payload plus structure? If the payload side outweighs the driver at any angle
-  the mechanism stalls there.
-- **Energy budget:** driver potential energy released, minus payload potential energy gained, minus
-  structure potential energy gained, must exceed the payload kinetic energy the design claims.
-  Payload speed is bounded by `v <= sqrt(2*E_available/m_payload)`.
-- **Ratios, not absolutes:** feasibility depends on mass ratio x lever ratio, so it holds at any consistent scale.
+## Execution supervision (once the task is accepted)
 
-If either check fails, do not build the interactive model as a "working" design. Report the failure, the
-numbers, and use `search_fix.mjs`-style search to propose parameter changes that pass.
+After the intake questions are answered, the skill acts as its own orchestrator and runs the workflow
+autonomously to completion. It does not check in with the user between expert steps:
 
-## Verdict vocabulary (what the report may claim)
+- **Auto-drive steps 3→10** (gate, reference, scaffold, build, verify, sweeps, report). Use headless
+  scripts and self-checks; report progress only at the end (or on a real blocker).
+- **Only pause for two reasons:** (a) a "must ask the user" item from the decision-ownership table — batch
+  it into one message; (b) a "must stop" item — report numbers and options. Never pause on expert decisions.
+- **Self-verify before declaring done:** `test/verify.mjs` passes, rest state settles, no clip/inversion,
+  engine matches reference. If a check fails, fix it yourself — do not hand the user a broken build.
+- **One final summary** when done: what was built, the verdict, assumptions, how to run it.
+
+## Decision ownership vs capability boundary (they are different)
+
+- **Capability boundary** = does this skill take the job at all (capability-guide.md): FEA/strength, pure
+  decoration, no-anchor numeric gates are rejected up front.
+- **Decision ownership** = once the job is accepted, who picks each value (this page).
+  They are not the same: a task can be inside capability yet still need one user decision (what success
+  looks like). Resolve capability at intake; resolve ownership per-step through the workflow.
+
+
+## Gates are per physics domain
+
+Gates are not derived per device. Check `references/mechanism-templates.md` first: each domain
+(kinematic chain, field force, track-guided, motor control, …) brings its own gate shape and tooling.
+A new domain is warranted only by a new physical theory / math tool — never by a different device shape.
+
+The verdict vocabulary:
 
 | Evidence | Allowed claim |
 |---|---|
 | Spec only, geometry matches sketch overlay | "Geometrically consistent with the sketch" |
-| + gate passes, reference solver agrees with engine | "Kinematically and dynamically plausible at concept level" |
+| + gate passes, reference agrees with engine | "Kinematically and dynamically plausible at concept level" |
 | + sweeps show margin around the operating point | "Feasible within the modeled assumptions" |
 | any load-bearing `fitted` quantity | "Demonstration only. Not a feasibility result." |
 
-Every verdict is scoped to the declared physics-restore level (L0-L5, see `references/capability-guide.md`):
-a build that stops at L2 kinematics claims nothing about L3-L5 dynamics.
+Every verdict is scoped to the declared physics-restore level (L0 geometry -> L1 materials -> L2
+kinematics -> L3 rigid dynamics -> L4 friction/collision -> L5 fields/drives/control; see
+`references/capability-guide.md`).
 
 ## Report template
 
 1. Scope: what was validated, scale anchor and how it was chosen.
-2. Assumptions table: every `assumed` and `fitted` item with its value.
-3. Gate results and reference-vs-engine agreement (V2: cite `xcheck_suite.mjs` output, both variant families).
+2. Assumptions table: every `assumed` / `fitted` item with its value.
+3. Gate results and reference-vs-engine agreement.
 4. Sensitivity: which parameters move the outcome most.
 5. Verdict using the vocabulary above.
 6. **Not modeled** list.
 7. Suggested design changes, each verified by the reference solver.
 
-## Lite edition (single HTML, for onboarding)
+## Lite edition (single HTML, onboarding)
 
-Same Spec, reduced fidelity: one sketch, simplified physics, no cross-check, no overlay check. Delivery
-checks before calling it done:
-
-- Shows a visible "demonstration grade" badge; must **not** issue a feasibility verdict.
-- Exports `spec.json` next to the build with `scale.status` and every load-bearing quantity's provenance.
-- Lists what the full local workflow adds (multi-view intake, overlay check, sweeps, feasibility report).
-- Confirms the hosting environment's allowed CDNs actually serve the physics libraries before promising it.
-
-## Auditing an existing demo
-
-Run `references/audit-checklist.md` against the project. Extract a Spec from its code (see
-`examples/trebuchet.spec.json`), run the gate and sweeps on the extracted Spec, and file findings with
-evidence. Worked example: `audit/paper-trebuchet-audit.md`.
+Same Spec, reduced fidelity: one sketch, simplified physics, no cross-check. Delivery checks:
+- visible "demonstration grade" badge; must not issue a feasibility verdict;
+- exports `spec.json` with `scale.status` and every load-bearing quantity's provenance;
+- lists what the full workflow adds;
+- confirms the hosting CDNs actually serve the physics libraries.
 
 ## References
 
-- `references/sketch-intake.md` view requirements, recognition output format, ambiguity confirmation protocol (workflow steps 0-2)
-- `references/mechanism-templates.md` physics-domain modules (`rigid_linkage` / `field_force` / `track_guided` / future domains), their gates and tooling, combination rules; check before deriving a gate from scratch — modules are matched by physical theory, not by device shape
-- `references/spec-schema.md` fields, provenance, validation rules
-- `references/architecture-checklist.md` code-quality checks (single source of truth in code, module boundaries, stale residue); run when building or refactoring the interactive build
-- `references/physics-pitfalls.md` engine and modeling pitfalls with evidence
-- `references/capability-guide.md` what sketch types this skill can validate, what it cannot, the L0-L5 physics-restore levels, and how to choose (read first when handed a new sketch)
-- `references/audit-checklist.md` checkable items for building or auditing
+- `sketch-intake.md` — view requirements, recognition output format, expert-then-yes/no ambiguity protocol (steps 0-2)
+- `mechanism-templates.md` — physics-domain modules, their gates, when to add a new domain
+- `spec-schema.md` — fields, provenance, validation rules
+- `capability-guide.md` — what/what-not this skill validates, the L0-L5 restore ladder
+- `project-delivery.md` — standard project tree, the interactive shell, sketch archiving, self-check (steps 5-10)
+- `architecture-checklist.md` — single source of truth, module boundaries, stale residue
+- `physics-pitfalls.md` — engine and modeling pitfalls, general rules
+- `audit-checklist.md` — checkable items for building or auditing
+- `template/` — the reusable Vite shell copied into every new project. The shell (scene, camera, panel,
+  tour/build, desk) is reused as-is; each project writes its mechanism, spec, annotations and textures.
 
-## Status (be honest with users)
+## Status (honest)
 
-Validated on one case (paper-trebuchet), always via code-extraction (`source.kind: "code-extraction"`) —
-every run so far started from existing code, never a real sketch. Spec extraction, reference solver, energy
-check, sweeps, fix search, audit checklist, and the V2 engine cross-check are all proven this way, across
-multiple rounds that landed real cannon-es modeling bugs (pitfalls 12-13), a declared-value-never-reaches-
-runtime bug (M6), a background-tab rAF freeze artifact (P6), an architecture pass (A1-A9), an interaction
-layer pass (T1-T7), and a case where widening the input range re-opened the cross-check and surfaced a
-genuine ~2 degree engine release-angle bias, reported as FAIL rather than masked (physics-pitfalls #18, #V2
-scripts now grid-generate from the Spec instead of hardcoding a range, so this doesn't silently go stale
-again). All of that is real, but all of it is single-case and starts from code, not a drawing.
-
-**Workflow steps 0-2 (sketch -> Spec) now have a written procedure** (`references/sketch-intake.md`): view
-requirements, a part-by-part recognition output format, and an ambiguity-confirmation protocol. This closes
-the gap where the skill's own workflow listed step 1 as "planned" while every actual run skipped it via
-code-extraction. **It has not been run on a real sketch yet** — treat it as a first draft that the first real
-sketch will correct, not as validated. The overlay fidelity check (render the build from the sketch's view,
-diff against it) is designed in principle in `sketch-intake.md` but not built.
-
-**First real sketch has now been run** (chat, 1648 Wilkins lodestone perpetual-motion design — not the
-trebuchet): steps 0-1 exercised the intake checklist and the recognition JSON on a genuine hand-drawn-style
-image with no scale anchor and no dimensions. It surfaced a real gap immediately — the recognition schema
-had `joints` but nothing for a track-follower or a non-contact force, which this mechanism is entirely made
-of — closed by adding `guides[]`/`fields[]` to the schema (`spec-schema.md`, `sketch-intake.md`) and a new
-`references/mechanism-templates.md` cataloging feasibility gates per mechanism class. This case also proved
-a gate can be *scale-independent* (a monotonicity argument, no reference solver, no sweep) where the
-trebuchet's gates always needed numbers — useful evidence the workflow isn't secretly numeric-only. Not yet
-done for this case: a Spec/report file (the verdict was reached and is recorded above, but not filed the way
-`audit/paper-trebuchet-audit.md` files the trebuchet's); steps 2 (ambiguity confirmation) and beyond were
-skipped because the case resolved at step 3 without needing them.
-
-**Architecture decision (2026-10-02, user-confirmed):** device-shaped templates do not scale — real-world
-sketches are arbitrarily diverse, so a per-device catalog would grow without bound. `mechanism-templates.md`
-was rewritten from mechanism classes to **physics-domain modules** (`rigid_linkage` / `field_force` /
-`track_guided` / future `control`·`elastic`·`hydro_aero`), combinable per device: a new domain is warranted
-only by a new physical theory or math tool, never by a different device shape. `capability-guide.md` adds
-the **L0-L5 physics-restore ladder** (L0 geometry → L1 materials → L2 kinematics → L3 rigid dynamics → L4
-friction/collision → L5 fields/drives/control) — every task declares its restore level up front, and a
-verdict is scoped to that level. Entry is open (any sketch can enter the common pipeline); modules are
-specific (each domain carries its gate + reference implementation + tooling).
-
-Still pending: (1) a sketch that goes all the way through steps 2 onward (ambiguity confirmation, Spec
-write, and — for a feasible design — the engine build and interaction layer) since the Wilkins case never
-needed to; (2) a mechanism domain that needs a genuinely new *numeric* gate (not scale-invariant like
-either case so far); (3) the overlay fidelity check, still undesigned in detail beyond the one paragraph in
-`sketch-intake.md`; (4) the **robot arm / robot mechanism as the next composition pressure test** —
-`rigid_linkage` × N joints plus a new `control` domain (motor drive / joint angles / inverse kinematics via
-D-H or screw theory), which will be the first multi-domain combination and the first build that needs the L2
-kinematics math, not just L3-L4 dynamics. Do not describe any of these as done.
+Distilled and now stress-tested end-to-end once: a hand-drawn Newton's cradle (two sketches, static +
+action) went through recognition, the ≤3-question expert-then-yes intake, Spec, analytic reference, build,
+and headless cross-check in one run. That run produced two new pitfalls (#24 suspended pendulum chains,
+#25 resting contact is the default) and the object-role model (dynamic actor / static world prop /
+visual-follow). Earlier builds were rigid-linkage and arm cases, partly from extracted code.
+Not yet exercised: overlay fidelity on a dimensioned engineering drawing; sweeps across the full input grid;
+a genuinely new physics domain beyond the catalog. Treat every reference as a draft the next real case corrects.
