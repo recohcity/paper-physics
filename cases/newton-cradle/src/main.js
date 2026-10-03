@@ -277,9 +277,9 @@ class App {
         gltf.scene.traverse((o) => {
           if (o.isMesh) {
             o.castShadow = true; o.receiveShadow = true;
-            // flatten balls: they appear vertically stretched in three.js
-            if (o.geometry && o.geometry.type === 'SphereGeometry' || /ball|sphere/i.test(o.name)) {
-              o.scale.y = 0.82;
+            // balls appear vertically stretched; compress Y to make them round
+            if (/ball/i.test(o.name)) {
+              o.scale.y = 0.78;
             }
             // replace Wood material with trebuchet wood
             if (o.material && o.material.name === 'Wood' && this.trebuchet.woodMat) {
