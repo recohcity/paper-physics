@@ -329,7 +329,7 @@ class App {
       cctx.drawImage(cutoutImg, (1024-dw)/2, 768-dh, dw, dh);
       cutoutTex.needsUpdate = true;
     };
-    cutoutImg.src = '/sketch.jpg';
+    cutoutImg.src = 'sketch.jpg';
     const cutoutGeom = new THREE.PlaneGeometry(1.35, 0.925);
     cutoutGeom.translate(0, 0.4625, 0);
     this.cradleCutout = new THREE.Mesh(

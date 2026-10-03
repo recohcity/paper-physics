@@ -180,7 +180,7 @@ export function createPaperWithSketchTexture(includeTrebuchet = true) {
   tex.colorSpace = THREE.SRGBColorSpace;
   if (!includeTrebuchet) return tex; // clean paper
   const img = new Image();
-  img.src = '/sketch.jpg';
+  img.src = 'sketch.jpg';
   img.onload = () => {
     const scale = Math.min((canvas.width * 0.5) / img.width, (canvas.height * 0.5) / img.height);
     const w = img.width * scale;
