@@ -1,8 +1,8 @@
 {
-  "buildCommand": "cd cases/trebuchet && npm install && npm run build && cd ../newton-cradle && npm install && npm run build",
+  "buildCommand": "cd cases/trebuchet && npm install && npm run build && cd ../newton-cradle && npm install && npm run build && cd ../lobby && npm install && npm run build",
   "outputDirectory": ".",
   "rewrites": [
-    { "source": "/", "destination": "/cases/lobby/index.html" },
+    { "source": "/", "destination": "/cases/lobby/dist/index.html" },
     { "source": "/trebuchet/(.*)", "destination": "/cases/trebuchet/dist/$1" },
     { "source": "/newton-cradle/(.*)", "destination": "/cases/newton-cradle/dist/$1" }
   ]
