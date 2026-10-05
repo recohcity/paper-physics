@@ -50,8 +50,8 @@
     <!-- Left: Title + Nav -->
     <div class="bottom-left">
       <div class="brand">
-        <h1 class="brand-title">Paper Trebuchet</h1>
-        <span class="brand-tag">sketch to physics</span>
+        <h1 class="brand-title" id="brand-title" style="cursor:pointer;">Paper Trebuchet</h1>
+        <span class="brand-tag" id="brand-tag" style="cursor:pointer;">Physics Info</span>
         <div class="nav-buttons">
           <button id="btn-play-tour" class="btn btn-primary">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
@@ -78,7 +78,10 @@
           <button id="btn-view-hero" class="view-btn active">Hero</button>
           <button id="btn-view-side" class="view-btn">Side</button>
           <button id="btn-view-top" class="view-btn">Top</button>
-          <button id="btn-view-3d" class="view-btn">3D</button>
+          <label class="switch" title="Free orbit">
+            <input type="checkbox" id="btn-view-3d">
+            <span class="slider"></span>
+          </label>
         </div>
       </div>
     </div>
@@ -90,8 +93,8 @@
       <button class="tour-step" data-step="1">LIFT</button>
       <button class="tour-step" data-step="2">MODEL</button>
       <button class="tour-step" data-step="3">WOOD</button>
-      <button class="tour-step" data-step="4">PARTS</button>
-      <button class="tour-step" data-step="5">FIRE</button>
+      <button class="tour-step" data-step="4">PHYSICS</button>
+      <button class="tour-step" data-step="5">PLAY</button>
       <button class="tour-step" data-step="6">REPLAY</button>
       <button class="tour-step" data-step="7">BUILD</button>
     </div>

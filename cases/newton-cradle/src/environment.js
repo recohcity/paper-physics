@@ -17,6 +17,7 @@ export class Environment {
     const tableGeom = new THREE.PlaneGeometry(10, 8);
     const tableMat = new THREE.MeshStandardMaterial({
       map: woodTableTexture,
+      color: 0xd9b98c, // warm wood tone, kills gray-green cast
       roughness: 0.55,
       metalness: 0.05,
     });
@@ -34,6 +35,7 @@ export class Environment {
 
     this.paperMat = new THREE.MeshStandardMaterial({
       map: this.paperSketchTexture,
+      color: 0xfff6e6, // warm off-white, matches the lifted cutout
       roughness: 0.9,
       metalness: 0.0,
     });
@@ -206,6 +208,16 @@ export class Environment {
 
     this.scene.add(eraserGroup);
     this.eraserGroup = eraserGroup;
+
+    // CRITICAL: three r160 ignores scene.environmentIntensity, so the
+    // RoomEnvironment PMREM would wash every desk material at intensity 1.
+    // Kill IBL on desk objects explicitly; only steel balls get envMap later.
+    this.scene.traverse((obj) => {
+      if (obj.material) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach((m) => { m.envMapIntensity = 0; });
+      }
+    });
   }
 
   hidePaperSketch() {
@@ -222,5 +234,12 @@ export class Environment {
     this.paperMat.needsUpdate = true;
     if (this.pencilGroup) this.pencilGroup.visible = true;
     if (this.eraserGroup) this.eraserGroup.visible = true;
+  }
+
+  // Swap paper sketch -> clean paper, but KEEP pencil/eraser visible (new spec).
+  clearPaperSketchOnly() {
+    this._paperSketchVisible = false;
+    this.paperMat.map = this.paperCleanTexture;
+    this.paperMat.needsUpdate = true;
   }
 }

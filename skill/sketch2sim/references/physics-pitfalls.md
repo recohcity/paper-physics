@@ -194,3 +194,112 @@ all, so the wrong Z value sticks.
 re-touches scale. Verify on the white-clay step that balls read as perfect spheres before approving
 the model.
 
+## 27. Never guess glb mesh roles — show the roster and confirm before attaching physics
+
+After a Blender export, mesh names are easy to misread. In the Newton's-cradle case the glb had
+`Socket_i_±1`, `Hook_i_±1`, `Cap_i_±1`, `HookRod_i_±1`, `Rope_i_±1` per ball. The skill assumed
+`Socket` = top beam anchor and attached `Cap`/`HookRod` to the ball, but actually `Hook` was the
+top fixed point and `Socket` was on the ball. Wrong parent = rope floats, bolts detach, balls
+swing but hardware stays put — symptoms that look like a physics bug but are a naming bug.
+**Rule:** right after glb load, print the full mesh list to the user as a table (name, proposed
+role: static anchor / dynamic body / visual-follow, and which mesh rides which). Wait for the
+user to confirm or correct before wiring any `attach()`, pivot, or rope anchor. Same gate before
+writing interaction code: list draggable mesh, followers, collision trigger, play/replay default,
+and confirm. This is not an expert decision — naming is a contract, and the user knows the model.
+
+
+## 28. Tour step navigation must reset to that step's starting state, not jump mid-transition
+
+When the user clicks a tour step button directly (e.g. "MODEL" after watching LIFT), the handler
+must first reset to that step's *starting* state, then play the transition. If it applies the end
+state directly (`applyMorphToStage(66)`) and then runs the step animation from its start, the user
+sees a flash of the finished result, then it disappears and replays.
+**Rule:** `seekTourStep(i)` calls `resetToFirstFrame()` first, then `applyTourStepStart(i)` which
+sets up the *beginning* of step i (e.g. for MODEL: cutout standing in Side view), then the step's
+own tween animates the transition. Never set the end state in `applyTourStepStart` — that's what
+the tween is for.
+
+## 29. The lifted 2D cutout must share the model's world position, not sit on the paper
+
+When the sketch lifts off the A4 paper and stands up, it should occupy the same XYZ position where
+the 3D model will unfold. If the cutout stays at the paper's Z position (e.g. Z=0.46) while the
+model group sits at Z=0, the crossfade looks like the model is growing out of empty space, not
+transforming from the drawing.
+**Rule:** set the cutout mesh position to match the model group's origin (`cradleGroup.position`),
+with the cutout's bottom edge resting on the same table height. Verify the cutout and model overlap
+on screen before approving the transition.
+
+## 30. PARTS should show physics formulas, not part names
+
+Labeling parts ("this is the beam", "this is a ball") adds no value — the user can already see them.
+The educational value is the physics: pendulum equation, momentum conservation, energy exchange.
+**Rule:** PARTS step shows a paper-style card (not floating labels) listing the governing equations
+for this mechanism. The card is dismissible (×), selectable (user can copy formulas), and toggled
+by clicking the project title. Card persists through PLAY/REPLAY, hides on BUILD.
+
+## 31. Free-orbit view is a toggle switch, not a view button
+
+A "3D" button that switches camera modes confuses users. Use a pill-style toggle (off=gray,
+on=gold). When off, Hero/Side/Top are fixed camera views. When on, OrbitControls is enabled and
+the user can freely orbit. Toggling off keeps the current camera angle (does NOT snap back to the
+last fixed view). Only clicking Hero/Side/Top resets to a fixed framing.
+**Rule:** `controls.enabled` must be gated by the toggle state, not by `currentView === '3D'`,
+otherwise the animation loop re-enables orbit every frame.
+
+## 32. BUILD mode always resets to rest state + default view
+
+Entering BUILD must: (a) reset physics to all balls at rest, (b) set materials to full (not white
+clay), (c) reset to the model's default interaction view (Side for Newton's cradle, Hero for
+trebuchet). If the user clicks BUILD mid-tour or mid-play, the scene must not stay in a partial
+tour state.
+**Rule:** `showBuildPanel()` calls `cradlePhys.reset()`, `_setCradleMorph(1.0)`, and
+`setCameraView(defaultBuildView, 800)`. Default view is per-model config, not global.
+
+## #33 Material double-mesh overlay envMap timing
+
+When using the white-clay → material fade pattern (cradleGroup = WHITE_CLAY,
+cradleMaterialGroup = clone with original materials fading in via opacity),
+the environment map (env.exr / HDR) loads asynchronously AFTER the GLB.
+If env.exr finishes loading after the GLB clone, the fix-up loop that re-assigns
+`material.envMap` must traverse **both** `cradleGroup` AND `cradleMaterialGroup`.
+Traversing only the primary group leaves the overlay with no env reflection,
+making metals (steel balls) render black. Symptom: metal balls go black after
+switching tour/build or navigating between cases, even though the primary group
+looks fine.
+
+**Rule:** After PMREM env texture is ready, write a helper `applyEnv(group)` and
+call it on every material-bearing group (primary, overlay, any clone). Set
+`needsUpdate = true` on each material.
+
+## #34 Tour/build reset must clear all groups
+
+`resetToFirstFrame()` (called on page load and when returning to tour from build)
+must hide EVERY group that build mode shows, not just the primary:
+- `cradleGroup.visible = false`
+- `cradleMaterialGroup.visible = false`
+- `cradleCutout.visible = false`
+- pencil/eraser `visible = true`
+- paper sketch texture shown
+Forgetting `cradleMaterialGroup` leaves a ghost material model floating over
+the sketch. Symptom: after clicking BUILD then back to TOUR, the 3D model is
+still visible behind the blueprint.
+
+## #35 Inter-case navigation is full page reload
+
+The lobby navigates with `window.location.href = url`, so each case gets a
+fresh JS context — no shared state leaks between cases. Do NOT add inter-case
+cleanup code; the bug is always inside the target case's own init/reset path.
+When a user reports "after switching back to case X, material is gone", check
+X's init sequence: async resources (env.exr, textures) may finish loading after
+the model group has already been set up, and the fix-up loop must cover all
+groups created at that point.
+
+## #36 Bidirectional tour/build reset
+
+Switching between TOUR and BUILD must reset state in BOTH directions:
+- BUILD → TOUR: call `resetToFirstFrame()` — hide 3D groups, show sketch, reset camera to top.
+- TOUR → BUILD: reset physics to rest (balls at center, no velocity), apply full material
+  (morph=1.0), set camera to the model's default build view (per-model config), hide
+  paper sketch + cutout + pencil/eraser. If the user was mid-tour on step 2 (white clay),
+  clicking BUILD must NOT leave them in white clay mid-animation.
+Both directions must also pause any running physics (tour auto-play) and clear tweens.

@@ -45,6 +45,18 @@
   -webkit-user-select: none;
 }
 
+.switch { position: relative; display: inline-block; width: 36px; height: 20px; margin-left: 6px; vertical-align: middle; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .slider { position: absolute; inset: 0; background: #3a3a3a; border-radius: 20px; cursor: pointer; transition: 0.3s; opacity: 0.5; }
+.switch .slider:before { content: ""; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: 0.3s; }
+.switch input:checked + .slider { background: #c8a878; opacity: 1; }
+.switch input:checked + .slider:before { transform: translateX(16px); }
+
+#parts-card, #parts-card * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
 html,
 body {
   width: 100%;
@@ -687,6 +699,17 @@ input[type="range"]::-webkit-slider-thumb {
   color: #fdfaf4;
 }
 
+/* Not-yet-built tour steps: derived from actual readiness, never hardcoded. */
+.tour-step.disabled {
+  color: #c4bba9;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.tour-step.disabled:hover {
+  background: none;
+  color: #c4bba9;
+}
+
 .scrubber-row {
   display: grid;
   grid-template-columns: 1fr 3fr 1fr;
@@ -869,4 +892,30 @@ input[type="range"]::-webkit-slider-thumb {
   flex: 1 1 0;
   min-width: 0;
   width: auto;
+}
+.physics-card {
+  position: fixed; top: 70px; right: 20px; width: 280px;
+  background: linear-gradient(135deg, #fff6e6, #f5e6c8);
+  border-radius: 12px; padding: 16px 20px; z-index: 900;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  font-size: 13px; color: #3a2a1a; line-height: 1.5;
+}
+.physics-card h3 { margin: 0 0 8px 0; font-size: 15px; }
+.physics-card p { margin: 4px 0; }
+.physics-card.hidden { display: none; }
+
+.physics-card {
+  position: fixed !important;
+  left: 30px !important;
+  bottom: 140px !important;
+  top: auto !important;
+  right: auto !important;
+  width: 280px;
+  background: linear-gradient(135deg, #f5f0e6, #e8e0d0);
+  border: 1px solid #d4c9b0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  z-index: 900;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  font-size: 13px; color: #3a2a1a; line-height: 1.5;
 }

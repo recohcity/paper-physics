@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] — Newton's cradle clean rebuild + shell standardization (2026-10-05)
+
+### 牛顿摆 case 重建
+- 从 `skill/template/` 全新克隆，无投石机残留
+- 8 步 tour：SKETCH → LIFT → MODEL → MATERIAL → PHYSICS → PLAY → REPLAY → BUILD
+- 动态按钮门控：MODEL/MATERIAL 等白模加载后开启，PHYSICS/PLAY/REPLAY/BUILD 等交互就绪后开启
+- 物理：5 钢球等质量弹性碰撞，restitution 0.95，V 形双绳约束 2D 平面
+- PLAY 自动：Ball_0 左拉 20° 释放 → 一个来回 → reset；REPLAY 0.25× 慢镜
+- Build 面板：拖拽任意球、Reset 复位静止、Side 默认视角
+
+### Shell 标准化（反哺 template）
+- 灯光/阴影/铅笔/橡皮/纸张从投石机 case 复制统一
+- A4 纸 castShadow，桌面 receiveShadow
+- 白模阶段 metalness=0 / roughness=1 / map=null
+- LIFT cutout 高度 0.35 对齐白模
+- 全英文 UI
+
+### skill
+- `references/project-delivery.md` 补：tour step 对称规则、PHYSICS 卡片规范、全英文 UI
+
 ## [0.2.0] — 多 case 大厅架构 + 牛顿摆端到端压测 + skill 双工作线（2026-10-03）
 
 ### 架构

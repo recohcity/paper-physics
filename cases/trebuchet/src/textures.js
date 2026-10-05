@@ -170,144 +170,15 @@ export function drawTrebuchetPencilSketch(ctx, tx, ty, helpers) {
 
 // Generate paper texture with pencil sketch (optionally omitting the trebuchet sketch)
 export function createPaperWithSketchTexture(includeTrebuchet = true) {
+  // sketch.jpg is already the composited A4 paper (line art + cream background).
+  // Return a blank canvas; main.js will swap the texture after sketch.jpg loads.
   const canvas = document.createElement('canvas');
   canvas.width = 2048;
   canvas.height = 1440;
   const ctx = canvas.getContext('2d');
-
-  // Warm cream paper
   ctx.fillStyle = '#f7f4ea';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Subtle paper grain noise
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imgData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const grain = (Math.random() - 0.5) * 14;
-    data[i] = Math.min(255, Math.max(0, data[i] + grain));
-    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + grain));
-    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + grain));
-  }
-  ctx.putImageData(imgData, 0, 0);
-
-  // Helper for pencil graphite drawing
-  function drawPencilLine(x1, y1, x2, y2, width = 3, opacity = 0.75, jitter = 1.2) {
-    ctx.save();
-    ctx.strokeStyle = `rgba(45, 42, 38, ${opacity})`;
-    ctx.lineWidth = width;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    const dist = Math.hypot(x2 - x1, y2 - y1);
-    const steps = Math.max(4, Math.floor(dist / 8));
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    for (let s = 1; s <= steps; s++) {
-      const t = s / steps;
-      const cx = x1 + (x2 - x1) * t + (Math.random() - 0.5) * jitter;
-      const cy = y1 + (y2 - y1) * t + (Math.random() - 0.5) * jitter;
-      ctx.lineTo(cx, cy);
-    }
-    ctx.stroke();
-
-    // Second faint stroke for pencil graphite look
-    ctx.strokeStyle = `rgba(50, 45, 40, ${opacity * 0.4})`;
-    ctx.lineWidth = width * 0.7;
-    ctx.beginPath();
-    ctx.moveTo(x1 + (Math.random() - 0.5) * 1.5, y1 + (Math.random() - 0.5) * 1.5);
-    ctx.lineTo(x2 + (Math.random() - 0.5) * 1.5, y2 + (Math.random() - 0.5) * 1.5);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawPencilRect(x, y, w, h, fillHatch = false) {
-    drawPencilLine(x, y, x + w, y);
-    drawPencilLine(x + w, y, x + w, y + h);
-    drawPencilLine(x + w, y + h, x, y + h);
-    drawPencilLine(x, y + h, x, y);
-
-    if (fillHatch) {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(60, 55, 50, 0.2)';
-      ctx.lineWidth = 1.2;
-      for (let i = 4; i < w + h; i += 8) {
-        ctx.beginPath();
-        const startX = Math.max(x, x + i - h);
-        const startY = Math.min(y + h, y + i);
-        const endX = Math.min(x + w, x + i);
-        const endY = Math.max(y, y + i - w);
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-  }
-
-  function drawPencilCircle(cx, cy, r) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(45, 42, 38, 0.7)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    for (let a = 0; a <= Math.PI * 2 + 0.2; a += 0.2) {
-      const rad = r + (Math.random() - 0.5) * 1.5;
-      const px = cx + Math.cos(a) * rad;
-      const py = cy + Math.sin(a) * rad;
-      if (a === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-
-    // Hub
-    ctx.beginPath();
-    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(45, 42, 38, 0.8)';
-    ctx.fill();
-    ctx.restore();
-  }
-
-  const helpers = { drawPencilLine, drawPencilRect, drawPencilCircle };
-  // Ground line in 3D is along Z = 0, which corresponds to the vertical center of the paper (Y = 700)
-  const groundY = 700;
-  const tx = 387; // Matches 3D trebuchet X = -0.72
-  const ty = groundY - 139; // Wheels touch the ground line exactly at groundY = 700
-
-  // 1. Optionally draw trebuchet sketch
-  if (includeTrebuchet) {
-    drawTrebuchetPencilSketch(ctx, tx, ty, helpers);
-  }
-
-  // 2. Ground line sketch across entire paper
-  drawPencilLine(120, groundY, 1920, groundY, 2.5, 0.45);
-  for (let g = 180; g < 1880; g += 90) {
-    drawPencilLine(g, groundY, g + 8, groundY + 9, 1.5, 0.3);
-  }
-
-  // 3. DRAW 10 BLOCKS PYRAMID (4 at bottom, 3, 2, 1) matching 3D blocks at X = 0.92, resting on the same ground line
-  if (includeTrebuchet) {
-    const bx = 1530;
-    const blockW = 68;
-    const blockH = 68;
-
-    // Row 0 (bottom 4) resting directly on groundY
-    for (let c = 0; c < 4; c++) {
-      drawPencilRect(bx + c * blockW, groundY - blockH, blockW, blockH, false);
-    }
-    // Row 1 (3 blocks)
-    for (let c = 0; c < 3; c++) {
-      drawPencilRect(bx + 34 + c * blockW, groundY - blockH * 2, blockW, blockH, false);
-    }
-    // Row 2 (2 blocks)
-    for (let c = 0; c < 2; c++) {
-      drawPencilRect(bx + 68 + c * blockW, groundY - blockH * 3, blockW, blockH, false);
-    }
-    // Row 3 (1 block on top)
-    drawPencilRect(bx + 102, groundY - blockH * 4, blockW, blockH, false);
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.anisotropy = 16;
-  return texture;
+  ctx.fillRect(0, 0, 2048, 1440);
+  return canvas;
 }
 
 // Generate the 2D paper cutout texture of the trebuchet for the stand-up animation

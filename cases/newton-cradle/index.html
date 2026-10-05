@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Newton's Cradle — Sketch to Physics (Claude Replica)</title>
+  <title>Newton's Cradle — Sketch to Physics</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -28,8 +28,8 @@
 
   <!-- 3D Canvas Container -->
   <div id="canvas-container"></div>
-  
-  <!-- 2D Overlay Canvas for Physics Trajectory Annotations (handwritten style) -->
+
+  <!-- 2D Overlay Canvas for annotations -->
   <canvas id="annotation-canvas"></canvas>
 
   <!-- Slow Motion 0.25x Badge -->
@@ -41,17 +41,17 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
     </div>
     <div class="tour-banner-text" id="tour-banner-text">
-      The first throw falls short, so the sketch gets more lead (0.48 kg → 0.68 kg).
+      Sketch on engineer paper. Click Play to start the tour.
     </div>
   </div>
 
-  <!-- Bottom Control Bar: integrated nav + build controls -->
+  <!-- Bottom Control Bar -->
   <div id="bottom-bar" class="bottom-bar">
     <!-- Left: Title + Nav -->
     <div class="bottom-left">
       <div class="brand">
-        <h1 class="brand-title">Newton's Cradle</h1>
-        <span class="brand-tag">sketch to physics</span>
+        <h1 class="brand-title" id="brand-title" style="cursor:pointer;">Newton's Cradle</h1>
+        <span class="brand-tag" id="brand-tag" style="cursor:pointer;">Physics Info</span>
         <div class="nav-buttons">
           <button id="btn-play-tour" class="btn btn-primary">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
@@ -78,7 +78,10 @@
           <button id="btn-view-hero" class="view-btn active">Hero</button>
           <button id="btn-view-side" class="view-btn">Side</button>
           <button id="btn-view-top" class="view-btn">Top</button>
-          <button id="btn-view-3d" class="view-btn">3D</button>
+          <label class="switch" title="Free orbit">
+            <input type="checkbox" id="btn-view-3d">
+            <span class="slider"></span>
+          </label>
         </div>
       </div>
     </div>
@@ -90,7 +93,7 @@
       <button class="tour-step" data-step="1">LIFT</button>
       <button class="tour-step" data-step="2">MODEL</button>
       <button class="tour-step" data-step="3">MATERIAL</button>
-      <button class="tour-step" data-step="4">PARTS</button>
+      <button class="tour-step" data-step="4">PHYSICS</button>
       <button class="tour-step" data-step="5">PLAY</button>
       <button class="tour-step" data-step="6">REPLAY</button>
       <button class="tour-step" data-step="7">BUILD</button>
@@ -100,12 +103,12 @@
         <button id="scrubber-mute" class="player-icon-btn" title="Toggle Sound">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
         </button>
-        <div class="scrubber-time" id="scrubber-current-time">00:04</div>
+        <div class="scrubber-time" id="scrubber-current-time">00:00</div>
       </div>
       <div class="scrubber-track-container" id="scrubber-container">
         <div class="scrubber-track">
-          <div class="scrubber-progress" id="scrubber-progress" style="width: 15%;"></div>
-          <div class="scrubber-thumb" id="scrubber-thumb" style="left: 15%;"></div>
+          <div class="scrubber-progress" id="scrubber-progress" style="width: 12.5%;"></div>
+          <div class="scrubber-thumb" id="scrubber-thumb" style="left: 12.5%;"></div>
         </div>
       </div>
       <div class="scrubber-side scrubber-right">
@@ -120,103 +123,65 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 19 22 12 13 5 13 19"></polygon><polygon points="2 19 11 12 2 5 2 19"></polygon></svg>
           </button>
         </div>
-        <div class="scrubber-time" id="scrubber-total-time">01:24</div>
+        <div class="scrubber-time" id="scrubber-total-time">00:16</div>
       </div>
     </div>
   </div>
 
-    <!-- Right: Build controls (hidden in tour mode) -->
+    <!-- Right: Build controls (hidden in tour mode; framework only for Workstream B) -->
     <div id="build-panel" class="build-panel hidden">
-      <!-- Stats 4-Column Grid -->
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-label">SPEED</div>
+          <div class="stat-label">VELOCITY</div>
           <div class="stat-value" id="stat-speed">— m/s</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">POWER</div>
-          <div class="stat-value" id="stat-angle">—</div>
+          <div class="stat-label">PERIOD</div>
+          <div class="stat-value" id="stat-angle">— s</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">RANGE</div>
-          <div class="stat-value" id="stat-range">— mm</div>
+          <div class="stat-label">ENERGY</div>
+          <div class="stat-value" id="stat-range">— J</div>
         </div>
         <div class="stat-card highlight">
-          <div class="stat-label">DOWN</div>
-          <div class="stat-value"><span id="stat-down-count">0</span>/10</div>
+          <div class="stat-label">CONTACT</div>
+          <div class="stat-value"><span id="stat-down-count">—</span></div>
         </div>
       </div>
 
-      <!-- Parameters: BALL (row 1) / WEIGHT (row 2) -->
-      <div class="panel-section param-section">
-      <div class="ctrl-group ball-group">
-        <div class="ctrl-label-row">
-          <label>BALL</label>
-          <span class="value-badge" id="ball-label">0.10 kg</span>
-        </div>
-        <input type="range" id="ball-slider" min="0.30" max="0.60" value="0.45" step="0.01"><!-- mirrors src/spec.js UI.ball -->
-      </div>
-
-      <!-- Weight slider (row 2 of the BALL/WEIGHT pair) -->
-      <div class="ctrl-group weight-group">
-        <div class="ctrl-label-row">
-          <label>WEIGHT</label>
-          <span class="value-badge" id="weight-label">0.68 kg</span>
-        </div>
-        <input type="range" id="weight-slider" min="1.40" max="10" value="4.80" step="0.01"><!-- mirrors src/spec.js UI.counterweight -->
-      </div>
-      </div>
-
-      <!-- Throw + Fire + toggles -->
       <div class="panel-section throw-section">
-      <div class="throw-group">
-        <div class="throw-row">
-          <div class="ctrl-group">
-            <div class="ctrl-label-row">
-              <label>THROW</label>
-              <span class="value-badge" id="pull-angle-label">pull 0°</span>
-            </div>
-            <input type="range" id="pull-slider" min="0" max="135" value="0" step="0.5"><!-- mirrors src/spec.js UI.pull (135° = 45° from mast) -->
+        <div class="throw-group">
+          <div class="toggles-row">
+            <button id="btn-toggle-slowmo" class="pill-btn">Slow motion</button>
           </div>
-          <button id="btn-fire" class="btn-fire">Fire</button>
         </div>
-        <div class="toggles-row">
-          <button id="btn-toggle-slowmo" class="pill-btn">Slow motion</button>
-          <button id="btn-toggle-flightpath" class="pill-btn">Flight path</button>
-        </div>
-      </div>
       </div>
 
-      <!-- Model morph + footer actions -->
       <div class="panel-section model-section">
-      <div class="morph-group">
-        <div class="ctrl-group">
-          <div class="ctrl-label-row">
-            <label>SKETCH—MODEL</label>
-            <span class="value-badge" id="morph-stage">MATERIAL</span>
-          </div>
-          <input type="range" id="morph-slider" min="0" max="100" value="100" step="1">
-          <div class="morph-scale">
-            <span class="morph-tick t0"></span>
-            <span class="morph-tick t33"></span>
-            <span class="morph-tick t66"></span>
-            <span class="morph-tick t100"></span>
+        <div class="morph-group">
+          <div class="panel-footer">
+            <button id="btn-reset" class="action-btn">Reset</button>
+            <button id="panel-sound-btn" class="action-btn icon-only" title="Toggle Sound">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            </button>
           </div>
         </div>
-        <div class="panel-footer">
-          <button id="btn-reset" class="action-btn">Reset</button>
-          <button id="panel-sound-btn" class="action-btn icon-only" title="Toggle Sound">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-          </button>
-        </div>
-      </div>
       </div>
     </div>
   </div>
 
   <!-- Drag Instruction Pill -->
   <div id="drag-hint" class="drag-hint hidden">
-      <span class="dot">●</span> Hold the cup, pull down, and let go
+      <span class="dot">●</span> Drag a ball to lift it, release to collide
+  </div>
+
+  <!-- Physics Info Card (PHYSICS step only) -->
+  <div id="physics-card" class="physics-card hidden">
+    <h3>Newton's Cradle — Physics</h3>
+    <p><b>Pendulum:</b> θ̈ = −(g/L) sinθ</p>
+    <p><b>Collision:</b> equal-mass elastic, swap tangential velocity v₁′ = v₂, v₂′ = v₁</p>
+    <p><b>V-rope constraint:</b> two strings per ball confine motion to 2D plane</p>
+    <p><b>Restitution:</b> e = 0.97</p>
   </div>
 
 

@@ -83,7 +83,109 @@ Every delivered app ships with this shell; it is not optional:
 - **Desk environment**: wooden table, an A4 sheet showing the user's sketch, a pencil and an eraser
   lying on the paper. Skin points (table material, paper tint, eraser style) are in one config object so
   a project can restyle without touching mechanism code.
+- **Lighting (no blowouts).** The tone-mapping exposure, key light and ambient/hemisphere light must be
+  balanced against the cream paper and wood desk — never let the highlights clip them to white. Target
+  look: chrome/steel parts (e.g. the cradle balls) carry visible specular reflections but stay silver,
+  not blown-out white; the A4 paper reads as warm cream `#f7f4ea`, not a glaring sheet; the pencil lines
+  of the sketch on the paper stay crisp and legible under the lights. **Do not redesign this rig per
+  case: open `cases/trebuchet/src/main.js` and `cases/trebuchet/src/environment.js`, and copy the
+  renderer/toneMapping/light/shadow/env-setup block verbatim into the new case's `main.js` and
+  `environment.js`.** The numbers below are a record of that reference build; if the files and this
+  spec disagree, the files win. Re-tune only when a genuinely new material forces it.
+  Standard rig (shared by every case, do not reinvent per project):
+  - `renderer.toneMapping = ACESFilmicToneMapping`, `toneMappingExposure ≈ 1.08`.
+  - `renderer.shadowMap.type = PCFSoftShadowMap`. Do **not** use VSM — the reference
+    trebuchet uses PCFSoft, and VSM leaks light around thin parts (pencil, strings).
+  - IBL via `scene.environment` (e.g. a `RoomEnvironment` PMREM). This is where the
+    recurring overexposure trap lives:
+    - **three r160 (our pinned version) does NOT support `scene.environmentIntensity`**
+      (that property was added in r163). Setting it to `0` in r160 silently does nothing —
+      do not rely on it to suppress global IBL.
+    - A PMREM `RoomEnvironment` becomes a global light source: every `MeshStandardMaterial`
+      defaults to `envMapIntensity = 1`, so the wood desk and cream paper get washed out
+      no matter how low you crank the key/fill/ambient. Symptom: "paper and table stay
+      white no matter what I adjust."
+    - **Correct fix:** after assigning `scene.environment`, traverse the scene and
+      explicitly set `envMapIntensity = 0` on every non-metallic material (desk, paper,
+      pencil, eraser, painted wooden frame). Then set `envMapIntensity = 1.0` only on
+      the metallic materials (chrome cradle balls, steel hardware). The env map exists
+      solely to give metals a reflection; everything else is lit by the three lights below.
+  - Three lights (exact baseline, copy from the reference build):
+    - `AmbientLight(0xffeed9, 0.95)` — warm lift so shadow side never goes black.
+    - Sun / key `DirectionalLight(0xfffaec, 2.3)` at position `(-2.5, 4.5, 3.2)`,
+      `castShadow = true`, PCFSoft shadow map.
+    - Fill `DirectionalLight(0xdce7f6, 0.6)` at position `(3, 2, -1)`, no shadow,
+      cool-toned to separate the shadow side from the warm key.
+  - Non-metal surfaces (wood desk, cream paper, painted parts) are lit by key + fill +
+    ambient only. Metals get their sparkle from the env map at `envMapIntensity ≈ 1.0`.
+  Acceptance: the wood desk reads as actual wood color (not white); the A4 paper stays warm cream
+  `#f7f4ea` and not glaring; the chrome balls show a natural specular highlight without clipping to
+  white; and at SKETCH step from the Top camera you can read every stroke of the user's sketch without
+  squinting.
 - **Annotations**: hotspots/leader-lines anchored to mechanism meshes, not hand-copied coordinates.
+
+### UI language (English by default)
+
+All user-facing UI copy ships in English. This is non-negotiable:
+
+- Every piece of text the user sees in the DOM — button labels, panel titles, card names,
+  tour banner / stage captions, readout row labels, annotation callouts, slider value
+  suffixes, empty states, toasts — must be written in English.
+- Case titles and lobby (home screen) sketch-card names use the English product name
+  (e.g. `"Paper Trebuchet"`, `"Newton's Cradle"`). Never use the Chinese name in the UI,
+  even if the user spoke Chinese.
+- Code comments, `project.json` internal fields, and `docs/` report prose may stay in the
+  author's working language (including Chinese); the boundary is anything rendered into
+  the page.
+
+### Physics info card
+
+Every delivered app ships a paper-style physics info card — it is the educational
+payload, not a part-name legend. (Part labels already answer themselves; the card
+must answer *why the mechanism moves*.)
+
+- **Content.** The card lists the governing equations and physical principles for
+  this mechanism (e.g. pendulum period, momentum/energy conservation for a cradle;
+  torque / energy exchange for a trebuchet). It must NOT be a list of component names.
+  Copy the formulas verbatim from this project's `docs/report.md` / Spec so the card
+  and the written deliverable agree.
+- **Position.** Fixed overlay in the **lower-left**, sitting **above the bottom
+  control panel and above the project-name title block**. Do not cover the 3D viewport
+  center, the right-side parameter panel, or the camera presets.
+- **Triggers.**
+  - Clicking the **PHYSICS** stage button shows the card (and hides it again when
+    another stage takes over).
+  - During auto-play the card is on screen **between the PHYSICS step and the PLAY
+    / RUN step**; it must disappear as soon as the mechanism starts moving.
+  - Entering **BUILD** mode always hides the card — build mode is for tweaking, not
+    for reading theory.
+  - Clicking the **project title** in the title block (with its small `ⓘ` / info
+    glyph) also pops the card open; in this trigger mode it **auto-hides after ~5 s**
+    so it doesn't block the scene.
+- **Style (template defaults — do not restyle per case).** The card looks like a
+  sheet of paper lying on the desk:
+  - Background: warm beige / cream vertical gradient (e.g. `linear-gradient(180deg,
+    #f7efd9 0%, #efe3c4 100%)`), subtle soft drop shadow, small rounded corners.
+  - Body text uses a dark brown-gray ink (near `#3b2f1e`) so it reads as printed on
+    paper, not pure black.
+  - Each formula is preceded by a **small brown caption label** in a muted brown
+    (e.g. `#8a6a3b`), small font size, normal weight — think "figure caption" rather
+    than a heading.
+  - **Formulas themselves are set in `Georgia`, italic**, as on a textbook page:
+    `font-family: Georgia, 'Times New Roman', serif; font-style: italic;`. Use plain
+    Unicode (e.g. `p = m·v`, `Δp = 0`, `T = 2π√(L/g)`) so they stay selectable and
+    copyable as text — no MathJax / SVG / canvas that would break selection.
+  - The **× close button sits in the top-right corner** of the card (small,
+    paper-brown, not a filled red X), aligned to the inner padding.
+  - The body text must be **user-selectable and copyable** (no `user-select: none`,
+    no pointer-events trap on the text) — the point is that the user can copy a
+    formula out.
+- All card text (title, formulas, captions) follows the UI-language rule: English.
+
+Acceptance: open PHYSICS, the card appears with the right formulas; select a formula
+with the mouse and copy it to the clipboard; press × to dismiss; let auto-play run
+and confirm the card is visible at the PHYSICS→PLAY boundary and gone once the model
+starts moving; click the title and confirm the card reappears and fades out ~5 s later.
 
 ## 4. Mechanism interface (the 20% new code)
 
@@ -145,16 +247,61 @@ Every project's tour follows the same 8 stages. The shell drives them; the
 mechanism only provides the meshes/materials for each stage. Do NOT invent a
 new stage order.
 
-| # | Stage | What is on screen | What the mechanism must provide |
-|---|-------|-------------------|----------------------------------|
-| 0 | **READ** | Only the A4 paper with the user's sketch (centered, ~50% scale). Pencil + eraser on desk. No 3D model. | paper texture with sketch drawn on it (cream `#f7f4ea` bg) |
-| 1 | **LIFT** | Sketch outline fades in as a 2D cutout lying flat on the paper, then rotates `-PI/2 → 0` to stand up vertical. Camera: Side. | A `PlaneGeometry` mesh whose material is the sketch cutout (white bg removed, transparent). Starts flat on paper, stands up. |
-| 2 | **MODEL** | 2D cutout fades out; white (untextured) 3D model morphs in. Camera: Side. | The 3D group with all meshes in white/gray material. `visible=false` until this step. |
-| 3 | **MATERIAL** (was WOOD) | White model gets its real materials (metal/wood/plastic). | Material swap: white `MeshStandardMaterial` → textured. |
-| 4 | **PARTS** | Component labels / annotations fade in pointing at key parts. | Annotation sprites/lines anchored to part world positions. |
-| 5 | **RUN** (was FIRE) | The mechanism runs its canonical demo motion automatically. | The physics/animation sequence; camera follows. |
-| 6 | **REPLAY** | Slow-motion (0.25×) replay of the run. | Same animation with timeScale=0.25. |
-| 7 | **BUILD** | Switch to build mode: user can drag/adjust parameters. | Interactive drag handlers + parameter panel. |
+| # | Stage | Default camera | What is on screen | What the mechanism must provide |
+|---|-------|-----------------|-------------------|----------------------------------|
+| 0 | **SKETCH** (was READ) | **Top** (overhead on the paper) | Only the A4 paper with the user's sketch (centered, ~50% scale). Pencil + eraser on desk. No 3D model. | paper texture with sketch drawn on it (cream `#f7f4ea` bg) |
+| 1 | **LIFT** | **Side** (cutout stands up) | Sketch outline fades in as a 2D cutout lying flat on the paper, then rotates `-PI/2 → 0` to stand up vertical. | A `PlaneGeometry` mesh whose material is the sketch cutout (white bg removed, transparent). Starts flat on paper, stands up. |
+| 2 | **MODEL** | **Hero** | 2D cutout fades out; white (untextured) 3D model morphs in. | The 3D group with all meshes in white/gray material. `visible=false` until this step. |
+| 3 | **MATERIAL** (was WOOD) | **Hero** | White model gets its real materials (metal/wood/plastic). | Material swap: white `MeshStandardMaterial` → textured. |
+| 4 | **PARTS** | **Hero** | Component labels / annotations fade in pointing at key parts. | Annotation sprites/lines anchored to part world positions. |
+| 5 | **RUN** (was FIRE / PLAY) | **Hero** (camera follows motion) | The mechanism runs its canonical demo motion automatically. | The physics/animation sequence; camera follows. |
+| 6 | **REPLAY** | **Hero** | Slow-motion (0.25×) replay of the run. | Same animation with timeScale=0.25. |
+| 7 | **BUILD** | model's default interaction view | Switch to build mode: user can drag/adjust parameters. | Interactive drag handlers + parameter panel. |
+
+The default camera per stage is fixed above and not free to vary per project.
+BUILD's resting view is the one the model's interaction was tuned for (e.g.
+Newton's Cradle = Side, Paper Trebuchet = Hero). The user may still orbit
+manually at any time; these are just the camera presets each stage auto-dials in.
+
+### Tour step symmetry
+
+The tour is a deterministic forward sequence. Every step's *start state* must equal
+the previous step's *end state*, and seeking to a step must replay that sequence —
+never jump straight to a step's visual.
+
+- **Forward play order:** SKETCH → LIFT → MODEL → MATERIAL → PARTS → RUN → REPLAY
+  → BUILD. When the user presses Play, the shell drives each step in order and waits
+  for that step's own animation to finish before advancing.
+- **Seeking (`seekTourStep(i)`).** Clicking a stage button to jump to step `i`
+  must first call `resetToFirstFrame()` (back to SKETCH: paper + sketch only, no
+  cutout, no 3D model, Top camera), then fast-forward through steps `0..i-1` in
+  order, applying each step's visual + animation, until it lands on step `i`.
+  It must **not** directly set the visuals of step `i` — otherwise meshes left over
+  from the previous visit (cutout still standing, white model already textured,
+  camera mid-tween) leak across steps.
+- **Step i start = step i-1 end.** No step is allowed to assume a clean slate; it
+  takes over whatever scene the prior step left behind.
+
+Concrete transition timings (the early steps, verbatim from the Newton's Cradle
+reference build; carry these into every new case):
+
+- **SKETCH → LIFT.** Camera Top → Side. Cutout rises from flat on the paper
+  (`rotation.x = -PI/2`) to vertical (`rotation.x = 0`) about its bottom edge.
+- **LIFT → MODEL.** Camera Side → Hero. Cutout fades out (opacity 1 → 0 over the
+  transition) while the 3D group fades in. The 3D group grows out of the cutout:
+  depth `z` expands `0.01 → 2` and a white-material morph progresses
+  `0.01 → 0.66`. At end of MODEL the white model sits at morph 0.66, fully lit,
+  matching the cutout silhouette (see LIFT cutout rules).
+- **MODEL → MATERIAL.** Hold the white model for ~0.8 s so the user registers the
+  shape, then run a ~1.5 s morph `0.66 → 1.0` that swaps in the real materials
+  (wood/metal/paint) per the MATERIAL-stage rules above. Do not start the material
+  swap instantly on arriving at MATERIAL — the hold is what sells "shape first,
+  color second".
+
+Acceptance: with the tour paused on SKETCH, click each stage button in random order.
+Every seek must first snap back to SKETCH and then walk forward; no step may show
+half-applied state (e.g. cutout still visible under the white model, or a half-textured
+model from a previous run).
 
 ### LIFT cutout rules (learned the hard way)
 
@@ -168,13 +315,48 @@ new stage order.
   (vertical). Position it just above the paper (`y ≈ 0.012`).
 - At MODEL step, hide the cutout and show the 3D group. Do not leave both
   visible.
+- **The white 3D model must match the cutout's silhouette, not just its position.**
+  Aligning world position (bottom edge / footprint) is not enough — the 3D
+  `cradleGroup`'s overall height, width and aspect ratio must match the LIFT
+  cutout's bounding box so the model visibly "grows out of" the sketch outline.
+  If the white model pops in noticeably taller, shorter, wider or narrower than
+  the cutout that was just standing there, the transition reads as a new object
+  being pasted in rather than the sketch becoming 3D.
+  Acceptance: at the end of the MODEL step, the 3D white model's outer silhouette
+  should coincide (or be very close) with the LIFT cutout's outline from the Side
+  camera. If they don't match, rescale the 3D group to the cutout's bounding box
+  before unhiding — do not ship a model that contradicts the drawn proportions.
+
+### MODEL stage: the white placeholder material
+
+When the 3D group first appears at the MODEL step, every mesh must be a uniform
+matte-white placeholder so the user reads "this is the shape, materials come next":
+
+- Use one shared `MeshStandardMaterial` per model with `color = 0xffffff`,
+  `metalness = 0`, `roughness = 1`, `map = null`, and `envMapIntensity = 0`.
+- Do **not** bake real wood/metal/paper textures into the MODEL step meshes.
+  No metalness > 0, no image textures, no env reflections yet — those are what the
+  MATERIAL step is for.
+- At the MATERIAL step, swap each mesh's material (or its props) to the real
+  material. Keep the placeholder instance around so a "reset to wireframe/white"
+  debug toggle can fall back to it.
+- Acceptance: at the end of MODEL the whole model reads as a neutral gray/white
+  mass; you cannot tell yet which parts are wood, steel or string. That distinction
+  is delivered by MATERIAL.
 
 ### READ paper rules
 
-- Paper is `BoxGeometry(2.7, 0.006, 1.85)` at `(0.12, 0.003, 0)`.
+- Paper is `BoxGeometry(2.7, 0.006, 1.85)` at `(0.12, 0.003, 0)`. It is a thin box, **not a plane** —
+  the 6 mm thickness is required so it has an edge and can cast a soft shadow onto the desk.
+- The paper mesh must have `castShadow = true`; the desk/table mesh must have `receiveShadow = true`.
+  Without these the cradle / trebuchet reads as floating.
 - Sketch is drawn centered at ~50% of paper width, not full-bleed.
 - Paper bg is cream `#f7f4ea`, never pure white.
 - Pencil at `(-0.05, 0.077, -0.73)`, eraser at `(1.15, 0.006+thickness/2, -0.75)`.
+- Fixed prop materials (template defaults — do not pick new colors per case):
+  - Pencil wooden shaft: `MeshStandardMaterial({ color: 0xdfa66c, roughness: 0.55, metalness: 0 })`.
+  - Eraser blue sleeve: `MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.6, metalness: 0 })`.
+  Both also get `envMapIntensity = 0` (non-metal, see Lighting rig).
 
 ## 9. Refined delivery workflow (v2, from Newton's Cradle pressure test)
 

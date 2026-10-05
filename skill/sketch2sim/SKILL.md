@@ -100,12 +100,15 @@ without it -> stop.
    - Pitfalls: #11, #24.
 5. **Scaffold.** Already done by Workstream B. Only `src/mechanism.js` is new.
 6. **Engine build + cross-check.** Build bodies/constraints from the Spec; run `test/verify.mjs` headlessly before handoff.
-   - Pitfalls: #6, #7, #8, #12, #13, #16, #22, #24, #25, #26.
+   - Pitfalls: #6, #7, #8, #12, #13, #16, #22, #24, #26.
    - **#26 specifically:** the 2D→3D z-unfold tween must be its own variable, not shared with the material morph. MODEL ends with `scale.z = 2` and spheres read as perfect white-clay spheres before MATERIAL touches materials.
+   - **Mandatory mesh roster gate (after glb load, before any physics attach):**
+     Print the full glb mesh list to the user as a table: mesh name, proposed role (dynamic actor / static world prop / visual-follow), and which mesh is the pivot anchor vs the moving body. **Stop and wait for user confirmation** before wiring any physics. This exists because glb mesh names are easy to misread (e.g. `Socket` vs `Hook` vs `Cap` — one is the top fixed point, one rides the ball) and a wrong guess costs hours of debugging rope/anchor mismatch. Do not silently pick — show the roster.
 7. **Sweeps.** Sweep design inputs headlessly.
    - Pitfalls: #18.
-8. **Interaction.** Direct manipulation, live readouts, slow-mo, replay.
-   - Pitfalls: #17, #19, #20, #21, #23.
+8. **Interaction. Direct manipulation, live readouts, slow-mo, replay.**
+   - Pitfalls: #17, #19, #20, #21, #23, #27.
+   - **Mandatory interaction-node gate (before writing drag/collision code):** list the interaction nodes to the user as a table: which mesh is draggable, what follows it (adjacent parts), what triggers collision, what play/replay auto-fires. Wait for user confirmation. The Newton's-cradle lesson: "drag ball i, balls 0..i follow, release to collide" was never stated explicitly — both sides guessed differently and produced a broken interaction.
 9. **PARTS auto-annotation.** Do NOT ask the user which parts to label. Extract key nodes from the build/interaction and auto-annotate.
 10. **Test + report.** tour and build both run clean; report; on user acceptance, lobby auto-adds the new blueprint card.
     - Pitfalls: #17, #23.

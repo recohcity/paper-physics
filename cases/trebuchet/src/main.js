@@ -275,8 +275,14 @@ class App {
 
   initEnvironment() {
     this.woodTableTexture = createWoodTableTexture();
-    this.paperSketchTexture = createPaperWithSketchTexture(true);
-    this.paperCleanTexture = createPaperWithSketchTexture(false);
+    // sketch.jpg is the pre-composited A4 paper (line art + cream background).
+    const loader = new THREE.TextureLoader();
+    this.paperSketchTexture = loader.load('sketch_trebuchet.jpg');
+    this.paperSketchTexture.colorSpace = THREE.SRGBColorSpace;
+    // Clean paper (no sketch) for when the sketch is lifted.
+    const cleanCanvas = createPaperWithSketchTexture(false);
+    this.paperCleanTexture = new THREE.CanvasTexture(cleanCanvas);
+    this.paperCleanTexture.colorSpace = THREE.SRGBColorSpace;
     this.environment = new Environment(
       this.scene,
       this.woodTableTexture,
@@ -416,6 +422,24 @@ class App {
 
   initAnnotations() {
     this.annotations = new TrajectoryAnnotations(this.annotationCanvas, this.camera);
+
+    // Physics formula card (PARTS step)
+    this._partsCard = document.createElement('div');
+    this._partsCard.id = 'parts-card';
+    this._partsCard.style.cssText = 'position:fixed;left:30px;bottom:140px;width:300px;background:linear-gradient(135deg,#f5f0e6,#e8e0d0);border:1px solid #d4c9b0;border-radius:2px;padding:18px;z-index:20;opacity:0;transition:opacity 0.5s;box-shadow:2px 4px 16px rgba(0,0,0,0.3);pointer-events:auto;';
+    this._partsCard.innerHTML = `<div style="position:absolute;top:6px;right:10px;cursor:pointer;color:#8b7355;font-size:14px;" onclick="document.getElementById('parts-card').style.opacity='0'">×</div>
+      <div style="color:#8b7355;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">Trebuchet</div>
+      <div style="color:#5a4a38;font-size:14px;font-weight:bold;margin-bottom:14px;">Physics Info</div>
+      <div style="color:#3a2e20;font-size:12px;line-height:1.9;">
+        <div style="margin-bottom:10px;"><div style="color:#8b7355;font-size:10px;">Pendulum Equation</div><div style="font-family:Georgia,serif;font-style:italic;">I₀·θ̈ = T₁·sinα·L₂ − m_b·g·sinθ·(L₂−s) − T₂·sinβ·L₁</div></div>
+        <div style="margin-bottom:10px;"><div style="color:#8b7355;font-size:10px;">Counterweight Motion</div><div style="font-family:Georgia,serif;font-style:italic;">m_c·ẍ = −T₂·sin(θ+β)</div></div>
+        <div><div style="color:#8b7355;font-size:10px;">Projectile Trajectory</div><div style="font-family:Georgia,serif;font-style:italic;">x = v₀·cosφ·t, y = v₀·sinφ·t − ½gt²</div></div>
+      </div>`;
+    document.body.appendChild(this._partsCard);
+    // Click title/tag to show card for 5s.
+    const showCard = () => { this._partsCard.style.opacity = '1'; clearTimeout(this._partsCardT); this._partsCardT = setTimeout(() => this._partsCard.style.opacity = '0', 5000); };
+    document.getElementById('brand-title')?.addEventListener('click', showCard);
+    document.getElementById('brand-tag')?.addEventListener('click', showCard);
     this.annotations.setWeight(this.counterweightKg, this.trebuchet.getCounterweightWorldPosition());
   }
 
@@ -500,15 +524,17 @@ class App {
       const d = this.getFitDistance(3.3, 2.2);
       targetPos = new THREE.Vector3(look.x, look.y + d, look.z + 0.01);
     } else if (viewName === '3D') {
-      this.btnView3D?.classList.add('active');
-      // Free 3D orbit: keep the current camera pose, just hand control back
-      // for mouse / trackpad / keyboard navigation.  No camera animation.
+      this._lastFixedView = this.currentView && this.currentView !== '3D' ? this.currentView : 'Hero';
       this.isCameraTransitioning = false;
       this.controls.enabled = true;
       this.controls.update();
       this.updateDragHint();
       return;
     }
+
+    // Fixed view: exit free orbit.
+    if (this.btnView3D) this.btnView3D.checked = false;
+    this.controls.enabled = false;
 
     if (duration === 0) {
       this.camera.position.copy(targetPos);
@@ -1034,6 +1060,8 @@ class App {
 
     // 1. Show desk paper pencil sketch; hide 3D model and 2D cutout
     this.environment.showPaperSketch();
+    if (this.environment.pencilGroup) this.environment.pencilGroup.visible = true;
+    if (this.environment.eraserGroup) this.environment.eraserGroup.visible = true;
     this.trebuchet.setMorphFactor(0);
     this.trebuchet.group.visible = false;
     if (this.cutoutMesh) {
@@ -1223,8 +1251,8 @@ class App {
       if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
       this.updateBallInCup();
     }
-    if (i >= 5) { // step 5 (PARTS) start: full material + all part labels
-      this.annotations.setPartLabels(this.getTourPartLabels(), this.getTourPartLabels().length, this.getLabelCenter());
+    if (i >= 5) { // step 5 (PARTS): physics card, no part labels
+      this.annotations.setPartLabels(null, 0);
     }
     if (i >= 6) { // step 6 (FIRE) start: ball in cup, labels off
       this.annotations.setPartLabels(null, 0);
@@ -1484,6 +1512,8 @@ class App {
       // -----------------------------------------------------------------
       if (startStep <= 1 && (singleStep === null || singleStep === 1)) {
         this.environment.hidePaperSketch();
+        if (this.environment.pencilGroup) this.environment.pencilGroup.visible = false;
+        if (this.environment.eraserGroup) this.environment.eraserGroup.visible = false;
         this.showTourBanner('2/8 Blueprint outline highlights, then lifts off as 2D cutouts');
         this.updateScrubber(0.19, '00:16');
         if (this.trebuchet.ropeMesh) this.trebuchet.ropeMesh.visible = false;
@@ -1532,6 +1562,7 @@ class App {
         this.showTourBanner('3/8 2D cutouts unfold into a 3D white model');
         this.updateScrubber(0.38, '00:32');
         this.highlightTourStep(2);
+        this.setCameraView('Hero', 1800);
         this.trebuchet.group.visible = true;
         this.trebuchet.setMorphFactor(0.01);
         this.physics.setMorphFactor(0.33);
@@ -1602,15 +1633,12 @@ class App {
       // Step 5: 渐进式显示每个主要部件名称（点线+文字）
       // -----------------------------------------------------------------
       if (startStep <= 4 && (singleStep === null || singleStep === 4)) {
-        this.showTourBanner('5/8 Parts — labels point to each major component');
+        this.showTourBanner('5/8 Physics — key equations for the trebuchet');
         this.updateScrubber(0.65, '00:55');
         this.highlightTourStep(4);
-        const labels = this.getTourPartLabels();
-        for (let i = 1; i <= labels.length; i++) {
-          this.annotations.setPartLabels(labels, i, this.getLabelCenter());
-          await sleep(420);
-        }
-        await sleep(900);
+        this._partsCard.style.opacity = '1';
+        await sleep(2500);
+        this._partsCard.style.opacity = '0';
       }
 
       // -----------------------------------------------------------------
@@ -1982,7 +2010,10 @@ class App {
     this.btnViewHero.addEventListener('click', () => this.setCameraView('Hero'));
     this.btnViewSide.addEventListener('click', () => this.setCameraView('Side'));
     this.btnViewTop.addEventListener('click', () => this.setCameraView('Top'));
-    this.btnView3D.addEventListener('click', () => this.setCameraView('3D', 0));
+    this.btnView3D.addEventListener('change', () => {
+      if (this.btnView3D.checked) this.setCameraView('3D', 0);
+      else { this.currentView = this._lastFixedView || 'Hero'; this.controls.enabled = false; }
+    });
 
     // Zoom slider
     this.zoomSlider.addEventListener('input', (e) => {
