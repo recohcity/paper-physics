@@ -26,13 +26,24 @@
 
 ## 本地运行
 
+### 预览构建版（日常看效果）
+
 ```bash
 git clone https://github.com/recohcity/paper-physics.git
 cd paper-physics
+npx vite
+```
+
+打开 http://localhost:5175/ 进入大厅，点击图纸进入各案例。
+
+### 开发模式（改代码热更新）
+
+```bash
 ./dev.sh
 ```
 
-打开 http://localhost:5175/ 进入大厅。
+启动三个 dev server：投石机 5173、牛顿摆 5174、大厅 5175。
+大厅会自动跳转到对应的 dev server，支持热更新。
 
 ## 项目结构
 

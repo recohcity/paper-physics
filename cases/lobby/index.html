@@ -169,28 +169,77 @@
     // env.pencilGroup.scale.setScalar(0.5);
     // env.eraserGroup.scale.setScalar(0.5);
 
-    // simple sound effects via WebAudio
+    // sound effects via WebAudio — distinct for paper vs solid props
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playPickup() {
+
+    // Paper pickup: soft rustle (filtered noise burst, high freq)
+    function playPaperPickup() {
+      const dur = 0.12;
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const filt = audioCtx.createBiquadFilter();
+      filt.type = 'highpass'; filt.frequency.value = 3000;
+      const g = audioCtx.createGain();
+      g.gain.value = 0.08;
+      src.connect(filt).connect(g).connect(audioCtx.destination);
+      src.start();
+    }
+
+    // Paper drop: softer rustle, lower
+    function playPaperDrop() {
+      const dur = 0.15;
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (data.length * 0.15));
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const filt = audioCtx.createBiquadFilter();
+      filt.type = 'bandpass'; filt.frequency.value = 2000; filt.Q.value = 0.5;
+      const g = audioCtx.createGain();
+      g.gain.value = 0.12;
+      src.connect(filt).connect(g).connect(audioCtx.destination);
+      src.start();
+    }
+
+    // Solid pickup (pencil/eraser): small click
+    function playSolidPickup() {
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
-      o.frequency.setValueAtTime(400, audioCtx.currentTime);
-      o.frequency.exponentialRampToValueAtTime(700, audioCtx.currentTime + 0.1);
-      g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      o.frequency.setValueAtTime(600, audioCtx.currentTime);
+      o.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.05);
+      g.gain.setValueAtTime(0.06, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + 0.08);
+    }
+
+    // Solid drop on wood: low thud with wood resonance
+    function playWoodThud() {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.frequency.setValueAtTime(180, audioCtx.currentTime);
+      o.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.1);
+      g.gain.setValueAtTime(0.25, audioCtx.currentTime);
       g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
       o.connect(g).connect(audioCtx.destination);
       o.start(); o.stop(audioCtx.currentTime + 0.15);
+      // add a tiny noise click for impact texture
+      const dur = 0.03;
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const filt = audioCtx.createBiquadFilter();
+      filt.type = 'lowpass'; filt.frequency.value = 1000;
+      const ng = audioCtx.createGain(); ng.gain.value = 0.15;
+      src.connect(filt).connect(ng).connect(audioCtx.destination);
+      src.start();
     }
-    function playDrop() {
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.frequency.setValueAtTime(200, audioCtx.currentTime);
-      o.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.1);
-      g.gain.setValueAtTime(0.15, audioCtx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
-      o.connect(g).connect(audioCtx.destination);
-      o.start(); o.stop(audioCtx.currentTime + 0.12);
-    }
+
     const tourAudio = sound;
     function playPaper() {
       tourAudio.playPaperSlide();
@@ -234,7 +283,9 @@
         dragging = p;
         dragMoved = false;
         dragStartPos.copy(p.position);
-        dragPlane.constant = -p.position.y;
+        p.userData.baseY = p.position.y;
+        p.position.y = 0.06; // lift like cards, but a touch more for 3D props
+        dragPlane.constant = -0.06;
         const hitPoint = new THREE.Vector3();
         raycaster.ray.intersectPlane(dragPlane, hitPoint);
         if (e.shiftKey) {
@@ -245,9 +296,8 @@
           dragMode = 'move';
           dragOffset.copy(p.position).sub(hitPoint);
         }
-        p.position.y = 0.02;
         p.traverse(o => { if (o.material) o.material.opacity = 0.9; });
-        playPickup();
+        playSolidPickup();
         return;
       }
       const card = pickCard(e);
@@ -268,7 +318,7 @@
         }
         card.position.y = 0.025;
         hovered = null;
-        playPickup();
+        playPaperPickup();
       }
     });
 
@@ -307,9 +357,15 @@
 
     window.addEventListener('mouseup', () => {
       if (dragging) {
+        const wasCard = !!dragging.userData.url;
         dragging.userData.targetY = dragging.userData.baseY;
-        dragging.userData.playDrop = true;
-        if (dragMoved) window._justDragged = true;
+        if (dragMoved) {
+          window._justDragged = true;
+          dragging.userData.playDrop = true; // only play collision sound if it was actually moved
+        } else {
+          delete dragging.userData.playDrop; // simple click: no drop sound
+        }
+        if (wasCard && dragMoved) playPaperDrop();
         dragging = null;
         dragMode = null;
         dragMoved = false;
@@ -353,10 +409,11 @@
     const CARD_W = 1.35;
     const CARD_H = 0.925;
 
-    const isLocal = location.hostname === 'localhost';
+    // Dev mode = vite dev server (pathname is just /). Built mode = serving from /dist/.
+    const isDev = location.hostname === 'localhost' && !location.pathname.includes('/dist/');
     const cardDefs = [
-      { url: isLocal ? 'http://localhost:5174/' : '/cases/newton-cradle/dist/', x: -0.45, z: 0.45, yaw: -0.32, tex: sketchTex, y: 0.004 },
-      { url: isLocal ? 'http://localhost:5173/' : '/cases/trebuchet/dist/', x: 0.7, z: 0.3, yaw: 0.2, tex: trebuchetTex, y: 0.001 },
+      { url: isDev ? 'http://localhost:5174/' : '/cases/newton-cradle/dist/', x: -0.45, z: 0.45, yaw: -0.32, tex: sketchTex, y: 0.004 },
+      { url: isDev ? 'http://localhost:5173/' : '/cases/trebuchet/dist/', x: 0.7, z: 0.3, yaw: 0.2, tex: trebuchetTex, y: 0.001 },
     ];
 
     const clickableMeshes = [];
@@ -440,19 +497,19 @@
 
     function animate() {
       requestAnimationFrame(animate);
+      // Cards ease back to base height
       cardGroups.forEach((g) => {
         const target = g.userData.targetY ?? g.userData.baseY;
-        g.position.y += (target - g.position.y) * 0.1;
+        g.position.y += (target - g.position.y) * 0.35;
       });
-      // pencil / eraser drop gravity
+      // Pencil/eraser drop — fast snap down
       [pencil, eraser].forEach((prop) => {
-        if (prop.userData.dropY !== undefined && prop.position.y > prop.userData.dropY) {
-          prop.position.y -= 0.02;
-          if (prop.position.y <= prop.userData.dropY) {
-            prop.position.y = prop.userData.dropY;
-            if (prop.userData.playDrop) { playDrop(); delete prop.userData.playDrop; }
-            delete prop.userData.dropY;
-          }
+        if (prop.userData.targetY !== undefined && Math.abs(prop.position.y - prop.userData.targetY) > 0.001) {
+          prop.position.y += (prop.userData.targetY - prop.position.y) * 0.4;
+        } else if (prop.userData.targetY !== undefined) {
+          prop.position.y = prop.userData.targetY;
+          if (prop.userData.playDrop) { playWoodThud(); delete prop.userData.playDrop; }
+          delete prop.userData.targetY;
         }
       });
       renderer.render(scene, camera);
