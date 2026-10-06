@@ -132,6 +132,12 @@ class App {
     this.clock = new THREE.Clock();
     this.animate();
 
+    // Fade out loading overlay
+    setTimeout(() => {
+      const l = document.getElementById('loading');
+      if (l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 400); }
+    }, 300);
+
     // Boot into default state: First frame showing pencil sketch on engineering paper
     this.resetToFirstFrame();
   }

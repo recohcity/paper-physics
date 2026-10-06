@@ -100,6 +100,12 @@ class App {
     this._initMaterialButtons();
     this.animate();
 
+    // Fade out loading overlay after first frame renders
+    setTimeout(() => {
+      const l = document.getElementById('loading');
+      if (l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 400); }
+    }, 300);
+
     this.resetToFirstFrame();
 
     // Self-check hook: ?autoplay=1 runs the tour on load (used by the bootstrap

@@ -26,6 +26,9 @@
   function goHome(){window.location.href = (location.hostname === 'localhost') ? 'http://localhost:5175/' : '/cases/lobby/dist/';}
   </script>
 
+  <!-- Loading overlay: cream, fades out after first frame -->
+  <div id="loading" style="position:fixed;inset:0;background:#f5f0e6;z-index:9999;transition:opacity 0.4s;"></div>
+
   <!-- 3D Canvas Container -->
   <div id="canvas-container"></div>
 

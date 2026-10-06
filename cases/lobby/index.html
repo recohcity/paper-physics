@@ -74,6 +74,7 @@
 </head>
 
 <body>
+  <div id="loading" style="position:fixed;inset:0;background:#f5f0e6;z-index:9999;transition:opacity 0.4s;"></div>
   <div class="brand-bar">
     <div class="brand-title">SKETCH TO PHYSICS</div>
     <div class="brand-actions">
@@ -394,13 +395,6 @@
     // Two blueprint cards lying flat on the desk. sketch.jpg is 1568x1600
     // (~0.98:1 near-square), so the plane matches that aspect to avoid stretching.
     // ---------------------------------------------------------------------------
-    // Cream placeholder so cards don't flash black before textures load
-    const placeholderCanvas = document.createElement('canvas');
-    placeholderCanvas.width = 2; placeholderCanvas.height = 2;
-    const pctx = placeholderCanvas.getContext('2d');
-    pctx.fillStyle = '#f5f0e6'; pctx.fillRect(0,0,2,2);
-    const placeholderTex = new THREE.CanvasTexture(placeholderCanvas);
-
     const trebuchetTex = new THREE.TextureLoader().load('trebuchet.jpg', (t) => {
       t.colorSpace = THREE.SRGBColorSpace;
       t.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -461,13 +455,14 @@
       group.add(shadowMesh);
 
       const mat = new THREE.MeshStandardMaterial({
-        map: placeholderTex, // start with cream placeholder, swap when real texture loads
+        map: c.tex,
+        color: 0xf5f0e6, // cream fallback before texture loads (not black)
         roughness: 0.9,
         metalness: 0.0,
         side: THREE.DoubleSide,
       });
-      // Swap to real texture once loaded
-      c.tex.onLoad = () => { mat.map = c.tex; mat.needsUpdate = true; };
+      // Once texture loads, reset color to white so it shows true colors
+      c.tex.onLoad = (() => { const orig = c.tex.onLoad; return () => { mat.color.set(0xffffff); if (orig) orig(); }; })();
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), mat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.receiveShadow = true;
@@ -524,6 +519,11 @@
       renderer.render(scene, camera);
     }
     animate();
+    // Fade out loading overlay
+    setTimeout(() => {
+      const l = document.getElementById('loading');
+      if (l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 400); }
+    }, 300);
   </script>
 </body>
 
