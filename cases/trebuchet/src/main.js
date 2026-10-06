@@ -194,8 +194,9 @@ class App {
     this.sunLight.shadow.camera.right = 2.8;
     this.sunLight.shadow.camera.top = 2.8;
     this.sunLight.shadow.camera.bottom = -2.8;
-    this.sunLight.shadow.bias = -0.0004;
-    this.sunLight.shadow.radius = 3.0;
+    this.sunLight.shadow.bias = -0.0002;
+    this.sunLight.shadow.radius = 12;
+    this.sunLight.shadow.blurSamples = 16;
     this.scene.add(this.sunLight);
 
     // Fill light
@@ -431,9 +432,10 @@ class App {
       <div style="color:#8b7355;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">Trebuchet</div>
       <div style="color:#5a4a38;font-size:14px;font-weight:bold;margin-bottom:14px;">Physics Info</div>
       <div style="color:#3a2e20;font-size:12px;line-height:1.9;">
-        <div style="margin-bottom:10px;"><div style="color:#8b7355;font-size:10px;">Pendulum Equation</div><div style="font-family:Georgia,serif;font-style:italic;">I₀·θ̈ = T₁·sinα·L₂ − m_b·g·sinθ·(L₂−s) − T₂·sinβ·L₁</div></div>
-        <div style="margin-bottom:10px;"><div style="color:#8b7355;font-size:10px;">Counterweight Motion</div><div style="font-family:Georgia,serif;font-style:italic;">m_c·ẍ = −T₂·sin(θ+β)</div></div>
-        <div><div style="color:#8b7355;font-size:10px;">Projectile Trajectory</div><div style="font-family:Georgia,serif;font-style:italic;">x = v₀·cosφ·t, y = v₀·sinφ·t − ½gt²</div></div>
+        <div style="margin-bottom:10px;"><div style="color:#8b7355;font-size:10px;">4:1 Lever</div><div style="font-family:Georgia,serif;font-style:italic;">v_cup = ω × L_long = 4 × v_cw</div></div>
+        <div style="margin-bottom:10px;"><div style="color:#8b7355;font-size:10px;">Energy Conversion</div><div style="font-family:Georgia,serif;font-style:italic;">m_c·g·Δh → ½·I·ω² → ½·m_b·v²</div></div>
+        <div style="margin-bottom:10px;"><div style="color:#8b7355;font-size:10px;">Projectile Trajectory</div><div style="font-family:Georgia,serif;font-style:italic;">x = v₀·cosφ·t, y = v₀·sinφ·t − ½gt²</div></div>
+        <div><div style="color:#8b7355;font-size:10px;">Parameters</div><div>g = 9.82 m/s² · CW 1.4–10 kg · Ball 0.3–0.6 kg</div></div>
       </div>`;
     document.body.appendChild(this._partsCard);
     // Click title/tag to show card for 5s.
@@ -1781,10 +1783,7 @@ class App {
     }
   }
 
-  showTourBanner(text) {
-    this.tourBannerText.textContent = text;
-    this.tourBanner.classList.remove('hidden');
-  }
+  showTourBanner(/* text */) { this.tourBanner.classList.add('hidden'); }
 
   hideTourBanner() {
     this.tourBanner.classList.add('hidden');

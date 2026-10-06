@@ -1,0 +1,24 @@
+{
+  "name": "trebuchet",
+  "scale": { "status": "OK", "anchor": "1 scene unit = 1 m" },
+  "world": { "gravity": 9.82 },
+  "physics": {
+    "leverRatio": 4.0,
+    "armLongX": 0.315,
+    "armShortX": -0.596,
+    "restAngle": -1.0,
+    "counterweightKg": { "min": 1.4, "max": 10.0, "default": 4.8 },
+    "ballKg": { "min": 0.05, "max": 0.30, "default": 0.10 },
+    "releaseAngle": 0.8,
+    "restitution": 0.4
+  },
+  "geometry": {
+    "blockCount": 3,
+    "blockKg": 0.14
+  },
+  "inputs": [
+    { "key": "counterweight", "label": "Counterweight (kg)", "min": 1.4, "max": 10, "step": 0.2, "value": 4.8 },
+    { "key": "ball", "label": "Ball weight (kg)", "min": 0.05, "max": 0.3, "step": 0.01, "value": 0.10 },
+    { "key": "pullback", "label": "Pull-back angle", "min": 0, "max": 45, "step": 1, "value": 30 }
+  ]
+}

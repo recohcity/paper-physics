@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
 import { createWoodFrameTexture } from './textures.js';
+import { sound } from './audio.js';
+import { SPEC } from './spec.js';
+
+// Physical constants for ball materials.
+// Ball radius calibrated at runtime; volume derived from ballR.
+const DENSITY = {
+  steel: 7850,    // kg/m³ — chrome steel
+  plastic: 1050,  // kg/m³ — ABS plastic
+};
 
 /**
  * NewtonCradleModel — white clay model that morphs into real materials.
@@ -29,8 +39,9 @@ function categoryFor(name) {
 }
 
 export class NewtonCradleModel {
-  constructor(scene, onReady = null) {
+  constructor(scene, renderer, onReady = null) {
     this.scene = scene;
+    this.renderer = renderer;
     this.onReady = onReady;
 
     this.group = new THREE.Group();
@@ -46,10 +57,48 @@ export class NewtonCradleModel {
     this.entries = [];
     this.roster = { steel: [], metal: [], wood: [], rope: [], led: [] };
     this.balls = [];
+    this.ballMats = [];   // per-ball MeshStandardMaterial
+    this.ballTypes = [];  // 'steel' | 'plastic' per ball, indexed by ball number
+    this.ballMatByName = {}; // mesh name → material
+    this.masses = [];     // per-ball mass (kg)
+    this._ballOverridden = new Set(); // mesh UUIDs manually switched
     this.physicsRunning = false;
     this._woodTex = createWoodFrameTexture();
+    this._envMaps = {};   // 'steel' | 'plastic' → PMREM texture
 
+    this._loadEnvMaps();
     this._loadGlb();
+  }
+
+  _loadEnvMaps() {
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      new EXRLoader().load('metal.exr', (tex) => {
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        this._envMaps.steel = pmrem.fromEquirectangular(tex).texture;
+        tex.dispose();
+        this._applyEnvToBalls();
+        console.log('[env] metal.exr loaded OK');
+      }, undefined, (e) => console.warn('metal.exr failed:', e));
+    } catch(e) { console.warn('env maps disabled:', e); }
+  }
+
+  _applyEnvToBalls() {
+    if (!this.ballMats.length) return;
+    for (let i = 0; i < this.ballMats.length; i++) {
+      const mat = this.ballMats[i];
+      const type = this.ballTypes[i] || 'steel';
+      if (type === 'steel') {
+        mat.envMap = this._envMaps.steel || null;
+        mat.envMapIntensity = 1.5;
+      } else {
+        mat.envMap = null;
+        mat.envMapIntensity = 0.3;
+        mat.color.set(0xd4a017);
+        mat.roughness = 0.55;
+      }
+      mat.needsUpdate = true;
+    }
   }
 
   _loadGlb() {
@@ -86,12 +135,21 @@ export class NewtonCradleModel {
       }
       this.entries.push({ mesh: obj, mat, real, cat });
       this.roster[cat].push(obj.name);
+      if (cat === 'steel') {
+        this.ballMats.push(mat);
+        this.ballMatByName[obj.name] = mat;
+        // Extract ball index from name "Ball_0" → 0
+        const idx = parseInt(obj.name.match(/Ball_(\d+)/)?.[1] ?? '0');
+        this.ballTypes[idx] = 'steel';
+      }
     });
   }
 
   // t=0 white clay -> t=1 real materials.
   setMaterialMorph(t) {
     for (const e of this.entries) {
+      // Skip manually-overridden ball materials.
+      if (e.cat === 'steel' && this._ballOverridden && this._ballOverridden.has(e.mesh.uuid)) continue;
       const m = e.mat, r = e.real;
       m.color.copy(CLAY.color).lerp(r.color, t);
       m.metalness = CLAY.metalness + (r.metalness - CLAY.metalness) * t;
@@ -120,6 +178,7 @@ export class NewtonCradleModel {
     this.theta = new Array(this.nBalls).fill(0);
     this.omega = new Array(this.nBalls).fill(0);
     this.dragIndex = -1;
+    this.dragIndices = new Set();
     const root = this.group.children[0];
     this.pivots = [];
     this.balls = [];
@@ -143,10 +202,92 @@ export class NewtonCradleModel {
       this.pivotGroups.push(pg);
       this.balls.push(ball);
     }
+    // Calibration runs AFTER the tour completes (delayed), when the model is
+    // fully visible and at rest. Measuring at GLB-load time gives wrong values
+    // because the LIFT/MATERIAL animations haven't positioned things yet.
     this.physicsRunning = false;
     this.interactiveReady = true;
-    // Dynamic V-ropes: two lines per ball from Hook±1 to ball.
     this.ropeLines = [];
+
+    // Apply env maps if already loaded (race: GLB vs EXR).
+    this._applyEnvToBalls();
+
+    // Delayed recalibration — fires 3s after init, when the scene is settled.
+    setTimeout(() => this._calibrateTouching(), 3000);
+    // Also expose for manual re-calibration from the console.
+    window.__recalibrate = () => this._calibrateTouching();
+  }
+
+  _calibrateTouching() {
+    if (this.balls.length < 2) return;
+    const n = this.balls.length;
+    this.scene.updateMatrixWorld(true);
+
+    const root = this.group.children[0];
+    const box = new THREE.Box3();
+    const lo = new THREE.Vector3(), hi = new THREE.Vector3();
+    const leftEdge = [], rightEdge = [];
+    for (let i = 0; i < n; i++) {
+      box.setFromObject(this.balls[i]);
+      lo.copy(box.min); root.worldToLocal(lo);
+      hi.copy(box.max); root.worldToLocal(hi);
+      leftEdge.push(lo.x);
+      rightEdge.push(hi.x);
+    }
+    console.log('[recal] leftEdge  :', leftEdge.map(v => v.toFixed(4)));
+    console.log('[recal] rightEdge :', rightEdge.map(v => v.toFixed(4)));
+
+    const diam = rightEdge[0] - leftEdge[0];
+    this.ballR = diam / 2;
+    this._computeMasses();
+
+    const gaps = [];
+    for (let i = 0; i < n - 1; i++) gaps.push(leftEdge[i + 1] - rightEdge[i]);
+    console.log('[recal] gaps:', gaps.map(v => v.toFixed(4)), 'diam:', diam.toFixed(4));
+
+    // Target: adjacent rightEdge[i] == leftEdge[i+1].
+    // Anchor middle ball, shift each pivot group to eliminate its gap.
+    const centerIdx = Math.floor(n / 2);
+    const centerLeft = leftEdge[centerIdx];
+    for (let i = 0; i < n; i++) {
+      const targetLeft = centerLeft + (i - centerIdx) * diam;
+      const deltaX = targetLeft - leftEdge[i];
+      if (Math.abs(deltaX) > 1e-6) {
+        this.pivotGroups[i].position.x += deltaX;
+        this.pivots[i].x += deltaX;
+        console.log('[recal] ball', i, 'shifted by', deltaX.toFixed(4));
+      }
+    }
+  }
+
+  // Compute mass per ball from volume × density.
+  _computeMasses() {
+    const vol = (4/3) * Math.PI * Math.pow(this.ballR, 3);
+    this.masses = this.ballTypes.map(t => vol * DENSITY[t]);
+    console.log('[physics] masses (g):', this.masses.map(m => (m*1000).toFixed(1)));
+  }
+
+  // Switch ball i between 'steel' and 'plastic'.
+  setBallMaterial(i, type) {
+    if (i < 0 || i >= this.ballTypes.length) return;
+    this.ballTypes[i] = type;
+    this._computeMasses();
+    const mat = this.ballMats[i];
+    this._ballOverridden.add(mat.uuid);
+    if (type === 'plastic') {
+      mat.color.set(0xd4a017);  // amber yellow
+      mat.metalness = 0.0;
+      mat.roughness = 0.55;      // matte plastic with soft highlight
+      mat.envMap = null;
+      mat.envMapIntensity = 0.3;
+    } else {
+      mat.color.set(0xc8ccd2);
+      mat.metalness = 0.95;
+      mat.roughness = 0.12;
+      mat.envMap = this._envMaps.steel || null;
+      mat.envMapIntensity = 1.5;
+    }
+    mat.needsUpdate = true;
   }
 
   // Tween pull ball i to angle a over durationMs, then release.
@@ -171,7 +312,19 @@ export class NewtonCradleModel {
     this.theta.fill(0);
     this.omega.fill(0);
     this.physicsRunning = false;
+    this.dragIndices.clear();
     this._applyKinematics(1 / 60);
+  }
+
+  // Full reset: physics + all ball materials back to steel.
+  resetAll() {
+    this.reset();
+    this._ballOverridden.clear();
+    for (let i = 0; i < this.ballTypes.length; i++) {
+      this.ballTypes[i] = 'steel';
+    }
+    this._computeMasses();
+    // Let setMaterialMorph(1) re-apply steel look to all balls.
   }
 
   // After one round-trip, smoothly damp all balls back to center and stop.
@@ -194,25 +347,37 @@ export class NewtonCradleModel {
     this._applyKinematics(1 / 60);
   }
 
-  beginDrag(i) { this.dragIndex = i; this.omega[i] = 0; }
-  endDrag() { this.dragIndex = -1; this.physicsRunning = true; }
+  beginDrag(i) {
+    if (!this.dragIndices) this.dragIndices = new Set();
+    this.dragIndices.add(i);
+    this.omega[i] = 0;
+  }
+  endDrag(i) {
+    if (!this.dragIndices) return;
+    if (i !== undefined) this.dragIndices.delete(i);
+    else this.dragIndices.clear();
+    if (this.dragIndices.size === 0) this.physicsRunning = true;
+  }
 
-  moveDragToX(worldX, worldY) {
-    if (this.dragIndex < 0) return;
+  moveDragToX(worldX, worldY, dragIdx) {
+    const di = dragIdx !== undefined ? dragIdx : this.dragIndex;
+    if (di < 0 || di === undefined || di === null) return;
     const local = new THREE.Vector3(worldX, worldY, 0);
     this.group.worldToLocal(local);
-    const p = this.pivots[this.dragIndex];
+    const p = this.pivots[di];
     const dy = p.y - local.y;
     const dx = local.x - p.x;
     const th = Math.atan2(dx, Math.max(0.02, dy));
-    this.theta[this.dragIndex] = Math.max(-1.2, Math.min(1.2, th));
-    this.omega[this.dragIndex] = 0;
-    // Push adjacent balls if touching.
-    for (let d = this.dragIndex - 1; d >= 0; d--) {
+    this.theta[di] = Math.max(-1.2, Math.min(1.2, th));
+    this.omega[di] = 0;
+    // Push adjacent balls if touching (only in the direction away from center).
+    for (let d = di - 1; d >= 0; d--) {
+      if (this.dragIndices && this.dragIndices.has(d)) break; // already being dragged
       const a = this.ballCenter(d + 1), b = this.ballCenter(d);
       if (a.x - b.x < 2 * this.ballR + 1e-4) this.theta[d] = this.theta[d + 1]; else break;
     }
-    for (let d = this.dragIndex + 1; d < this.nBalls; d++) {
+    for (let d = di + 1; d < this.nBalls; d++) {
+      if (this.dragIndices && this.dragIndices.has(d)) break;
       const a = this.ballCenter(d - 1), b = this.ballCenter(d);
       if (b.x - a.x < 2 * this.ballR + 1e-4) this.theta[d] = this.theta[d - 1]; else break;
     }
@@ -243,7 +408,7 @@ export class NewtonCradleModel {
   _applyKinematics(dt) {
     if (this.physicsRunning) {
       for (let i = 0; i < this.nBalls; i++) {
-        if (i === this.dragIndex) continue;
+        if (this.dragIndices && this.dragIndices.has(i)) continue;
         const acc = -(this.g / this.L) * Math.sin(this.theta[i]) - this.airDrag * this.omega[i];
         this.omega[i] += acc * dt;
         this.theta[i] += this.omega[i] * dt;
@@ -260,26 +425,76 @@ export class NewtonCradleModel {
             const vj = this.L * this.omega[i + 1];
             if (vi - vj > 0) {
               const e = this.restitution;
-              this.omega[i] = (vj + e * vj - e * vi + vi) / (2 * this.L);
-              this.omega[i + 1] = (vi + e * vi - e * vj + vj) / (2 * this.L);
+              const mi = this.masses[i] || 1;
+              const mj = this.masses[i + 1] || 1;
+              const M = mi + mj;
+              // 1D elastic collision with restitution, mass-weighted.
+              this.omega[i]     = ((mi - e*mj)/M * vi + (1+e)*mj/M * vj) / this.L;
+              this.omega[i + 1] = ((1+e)*mi/M * vi + (mj - e*mi)/M * vj) / this.L;
+              const hasPlastic = this.ballTypes[i] === 'plastic' || this.ballTypes[i+1] === 'plastic';
+              if (hasPlastic) sound.playPlasticClack(Math.abs(vi - vj) / 0.5);
+              else sound.playClack(Math.abs(vi - vj) / 0.5);
             }
           }
           const overlap = minSep - dx;
-          if (i === this.dragIndex) {
+          const mi = this.masses[i] || 1;
+          const mj = this.masses[i + 1] || 1;
+          const iDragged = this.dragIndices && this.dragIndices.has(i);
+          const jDragged = this.dragIndices && this.dragIndices.has(i + 1);
+          // Mass-weighted positional correction: lighter ball moves more.
+          const total = mi + mj;
+          if (iDragged && !jDragged) {
             this.theta[i] -= overlap / this.L;
-          } else if (i + 1 === this.dragIndex) {
+          } else if (jDragged && !iDragged) {
             this.theta[i + 1] += overlap / this.L;
-          } else {
-            this.theta[i] -= overlap / this.L * 0.5;
-            this.theta[i + 1] += overlap / this.L * 0.5;
+          } else if (!iDragged && !jDragged) {
+            this.theta[i]     -= overlap / this.L * (mj / total);
+            this.theta[i + 1] += overlap / this.L * (mi / total);
           }
         }
+      }
+    }
+    // Ceiling collision: ball center can't go above the pivot (top beam).
+    // Ball center y = pivotY - L*cos(theta). Above pivot means cos(theta) < 0.
+    // Limit theta to ±90° (horizontal). Bounce velocity back.
+    for (let i = 0; i < this.nBalls; i++) {
+      if (this.dragIndices && this.dragIndices.has(i)) continue;
+      const limit = Math.PI / 2 - 0.02; // just below horizontal
+      if (this.theta[i] > limit) {
+        this.theta[i] = limit;
+        if (this.omega[i] > 0) this.omega[i] *= -this.restitution;
+      } else if (this.theta[i] < -limit) {
+        this.theta[i] = -limit;
+        if (this.omega[i] < 0) this.omega[i] *= -this.restitution;
       }
     }
     // Rotate pivot groups.
     for (let i = 0; i < this.nBalls; i++) {
       this.pivotGroups[i].rotation.z = this.theta[i];
     }
+  }
+
+  // Bidirectional experiment: pull k balls from each end outward, then release
+  // immediately. angleL = left-side angle (rad), angleR = right-side angle.
+  async bidirectionalExperiment(angleL = 0.6, angleR = 0.6, k = 1, durationMs = 600) {
+    this.reset();
+    this.physicsRunning = false;
+    const start = performance.now();
+    while (performance.now() - start < durationMs) {
+      const t = (performance.now() - start) / durationMs;
+      for (let j = 0; j < k; j++) {
+        this.theta[j] = -angleL * t;                    // left side
+        this.theta[this.nBalls - 1 - j] = angleR * t;   // right side
+      }
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    for (let j = 0; j < k; j++) {
+      this.theta[j] = -angleL;
+      this.theta[this.nBalls - 1 - j] = angleR;
+      this.omega[j] = 0;
+      this.omega[this.nBalls - 1 - j] = 0;
+    }
+    this.physicsRunning = true;
   }
 
   setParam() {}

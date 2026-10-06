@@ -128,43 +128,38 @@
     </div>
   </div>
 
-    <!-- Right: Build controls (hidden in tour mode; framework only for Workstream B) -->
-    <div id="build-panel" class="build-panel hidden">
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-label">VELOCITY</div>
-          <div class="stat-value" id="stat-speed">— m/s</div>
+    <!-- Right: Build controls -->
+    <div id="build-panel" class="build-panel hidden" style="display:flex;flex-direction:row;gap:6px;overflow:visible;align-items:stretch;">
+      <!-- Card 1: Bidirectional experiment -->
+      <div class="panel-section throw-section" style="padding:8px 12px;width:320px;grid-row:auto;display:grid;grid-template-columns:100px 90px 1fr;gap:4px 8px;align-items:center;">
+        <span style="font-size:11px;color:#8a7e6e;letter-spacing:1px;">Bidirectional</span>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#8a7e6e;"><span>L</span><span id="val-angle-l">34°</span></div>
+          <input type="range" id="slider-angle-l" min="5" max="60" value="34" style="width:90px;height:3px;">
         </div>
-        <div class="stat-card">
-          <div class="stat-label">PERIOD</div>
-          <div class="stat-value" id="stat-angle">— s</div>
+        <button id="btn-bidir1" class="action-btn" style="padding:4px 8px;font-size:11px;">1 ball</button>
+        <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#5a5044;cursor:pointer;grid-column:1;">
+          <input type="checkbox" id="slider-link" checked style="margin:0;">Sync
+        </label>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#8a7e6e;"><span>R</span><span id="val-angle-r">34°</span></div>
+          <input type="range" id="slider-angle-r" min="5" max="60" value="34" style="width:90px;height:3px;">
         </div>
-        <div class="stat-card">
-          <div class="stat-label">ENERGY</div>
-          <div class="stat-value" id="stat-range">— J</div>
-        </div>
-        <div class="stat-card highlight">
-          <div class="stat-label">CONTACT</div>
-          <div class="stat-value"><span id="stat-down-count">—</span></div>
-        </div>
+        <button id="btn-bidir2" class="action-btn" style="padding:4px 8px;font-size:11px;">2 balls</button>
       </div>
-
-      <div class="panel-section throw-section">
-        <div class="throw-group">
-          <div class="toggles-row">
-            <button id="btn-toggle-slowmo" class="pill-btn">Slow motion</button>
-          </div>
+      <!-- Card 2: Material + playback -->
+      <div class="panel-section throw-section" style="padding:8px 12px;width:320px;grid-row:auto;display:flex;flex-direction:column;justify-content:center;gap:6px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:10px;color:#8a7e6e;white-space:nowrap;width:24px;">MAT</span>
+          <div id="ball-material-row" style="display:flex;gap:4px;flex:1;"></div>
         </div>
-      </div>
-
-      <div class="panel-section model-section">
-        <div class="morph-group">
-          <div class="panel-footer">
-            <button id="btn-reset" class="action-btn">Reset</button>
-            <button id="panel-sound-btn" class="action-btn icon-only" title="Toggle Sound">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-            </button>
-          </div>
+        <div style="display:flex;align-items:center;gap:6px;padding-left:30px;">
+          <button id="btn-toggle-slowmo" class="action-btn btn-primary" style="padding:4px 8px;font-size:11px;flex:1;">Slow</button>
+          <button id="btn-bidir-play" class="action-btn btn-primary" style="padding:4px 8px;font-size:11px;flex:1;">Play</button>
+          <button id="btn-reset" class="action-btn" style="padding:4px 8px;font-size:11px;flex:1;">Reset</button>
+          <button id="panel-sound-btn" class="action-btn icon-only" title="Toggle Sound" style="padding:4px 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+          </button>
         </div>
       </div>
     </div>
@@ -179,8 +174,12 @@
   <div id="physics-card" class="physics-card hidden">
     <h3>Newton's Cradle — Physics</h3>
     <p><b>Pendulum:</b> θ̈ = −(g/L) sinθ</p>
-    <p><b>Collision:</b> equal-mass elastic, swap tangential velocity v₁′ = v₂, v₂′ = v₁</p>
+    <p><b>Collision:</b> elastic, mass-weighted</p>
+    <p style="padding-left:12px;font-size:12px;">v₁′ = ((m₁−em₂)/(m₁+m₂))v₁ + ((1+e)m₂/(m₁+m₂))v₂</p>
+    <p style="padding-left:12px;font-size:12px;">v₂′ = ((1+e)m₁/(m₁+m₂))v₁ + ((m₂−em₁)/(m₁+m₂))v₂</p>
+    <p><b>Equal mass (steel):</b> reduces to velocity swap</p>
     <p><b>V-rope constraint:</b> two strings per ball confine motion to 2D plane</p>
+    <p><b>Materials:</b> steel 7850 kg/m³ · plastic 1050 kg/m³ (≈1/7.5 mass)</p>
     <p><b>Restitution:</b> e = 0.97</p>
   </div>
 

@@ -56,6 +56,29 @@ fake build.
    nothing passes through a static prop, the rest state settles as drawn, and the intended action fires. The
    user finding a ball clipping through the ceiling bar, a body hanging upside-down, or a prop silently not
    blocking means the build was delivered unfinished — treat that as your error, not their feedback.
+9. **Tour ⇄ Build switching must reset ALL state.** Every time the user crosses between tour mode and build
+   mode — in either direction — call a single `resetAll()` that restores: (a) physics (angles, velocities,
+   drag pointers, collision state), (b) all user-overridden materials back to default, (c) panel UI controls
+   back to default (slider values, toggle states, material buttons), (d) camera to the default view. Stale
+   state leaking across modes (a plastic ball left plastic when re-entering the tour, a mid-swing angle left
+   hanging) is a bug, not a feature — the user expects a fresh start every time they switch.
+10. **Build panel layout spec.** Compact card, max 3 rows, aligned grid:
+    - Sliders: fixed width ~90px (same as trebuchet panel), not flex-grow full width.
+    - Buttons in the same column must align vertically (use padding-left offset on second row to align under first).
+    - Per-object material toggles: small square buttons (~24×24px), not wide pills.
+    - Play/Slow/Reset row: left-aligned next to material toggles, speaker icon right-aligned.
+    - No data cards (VELOCITY/PERIOD/ENERGY) — they clutter and the user doesn't read them.
+    - Buttons: English labels, `btn-secondary` / `action-btn` style, consistent padding.
+11. **Physics info card.** A floating card explaining the governing equations, shown at the PHYSICS tour step
+    AND on demand by clicking the title. Rules:
+    - Must show: pendulum/dynamics equation, collision formula, constraint type, restitution/damping values.
+    - If the build supports per-object material/mass switching, the card must show the general (mass-weighted)
+      formula, not just the equal-mass simplification. List material densities.
+    - **Tour lifecycle:** card appears at step PHYSICS and stays visible through PLAY and REPLAY — do NOT
+      auto-hide when advancing to the next step. Hide it only when entering BUILD mode (step 7) or when the
+      user closes it via ×. No `await sleep()` on the card itself; the tour flow proceeds immediately.
+    - **On-demand click:** clicking the title or "Physics Info" tag shows the card for 5s then auto-hides.
+    - Text must be selectable (`user-select:text`), not decorative.
 
 ## Decision ownership (who decides what)
 
@@ -72,62 +95,103 @@ Rule of thumb: if a wrong answer changes the verdict or safety **and the user ca
 if the user cannot answer it -> decide as expert and mark `assumed`; if the whole task cannot stand
 without it -> stop.
 
-## Workflow
+## Workflow — Task Checklist
 
-> **Before each numbered step, read the pitfalls that step is known to trigger**
-> (`references/physics-pitfalls.md`). Skim all of them once at intake, then re-read the specific
-> numbered pitfalls below before starting that step. Do not start a step until its listed pitfalls
-> have been read — this is how the accumulated mistakes turn into checkable gates.
+> **Hard rule:** before starting ANY step, read the pitfalls tagged for that step
+> (`references/physics-pitfalls.md`, search by `[stepN]` tag). Do not start until read.
+> Every new problem discovered during a build MUST be written back to pitfalls with
+> the step tag, and if it is a template-level issue (lighting, panel, reset, lobby),
+> it must also be applied to `template/` immediately so the next case starts correct.
 
-0. **Intake. Do not ask questions — start two workstreams in parallel.**
-   - Pitfalls to read before this step: #1, #2, #15.
-   - **Workstream A (background, analysis):** parse sketch, materials, requirements; produce (a) a raw requirements list and (b) a numbered list of model/interaction questions to confirm later. Do not block the user on these.
-   - **Workstream B (foreground, setup):** immediately copy `template/` to `cases/<slug>/`, drop the user's sketch into `public/`, and boot the shell so that: the project name shows on the panel, **SKETCH** shows the sketch on the A4 sheet, **LIFT** already plays the cutout standing-up animation, zoom/view controls work.
-   - **Step gating by readiness (DO NOT hardcode disabled):** the tour step buttons are enabled/disabled dynamically based on what has actually been built:
-     - SKETCH + LIFT always available (template ships them).
-     - MODEL enabled only after the white 3D model is loaded.
-     - MATERIAL enabled only after materials are assigned.
-     - PARTS / PLAY / REPLAY / BUILD enabled as soon as any part of the model can move and be interacted with (even a simple drag).
-     - `playTour()` runs through whatever steps are currently available and stops at the first unbuilt step.
-   - Once Workstream B is up, use Workstream A's question list to confirm model/interaction details in **batches** (expert-then-yes/no, at most 3 questions per batch).
-1. **Recognition.** Read the sketch part by part. Native vision does the semantic read; output parts / joints / actuators / guides / fields JSON. **Do not ask the user to classify joints** — that is expert work.
-   - Pitfalls: #9, #10.
-2. **Spec + ambiguity confirmation.** Write the Spec, confirm ambiguities as expert-then-yes/no. Only ask about things that change the acceptance target. `scale.status` must be `"OK"` before continuing.
-   - Pitfalls: #2, #14.
-3. **Feasibility gate.** Use the gate of every matching physics domain. Stop and report if it fails.
-   - Pitfalls: #3, #4, #5.
-4. **Reference solution.** Solve the mechanism analytically or with a small integrator.
-   - Pitfalls: #11, #24.
-5. **Scaffold.** Already done by Workstream B. Only `src/mechanism.js` is new.
-6. **Engine build + cross-check.** Build bodies/constraints from the Spec; run `test/verify.mjs` headlessly before handoff.
-   - Pitfalls: #6, #7, #8, #12, #13, #16, #22, #24, #26.
-   - **#26 specifically:** the 2D→3D z-unfold tween must be its own variable, not shared with the material morph. MODEL ends with `scale.z = 2` and spheres read as perfect white-clay spheres before MATERIAL touches materials.
-   - **Mandatory mesh roster gate (after glb load, before any physics attach):**
-     Print the full glb mesh list to the user as a table: mesh name, proposed role (dynamic actor / static world prop / visual-follow), and which mesh is the pivot anchor vs the moving body. **Stop and wait for user confirmation** before wiring any physics. This exists because glb mesh names are easy to misread (e.g. `Socket` vs `Hook` vs `Cap` — one is the top fixed point, one rides the ball) and a wrong guess costs hours of debugging rope/anchor mismatch. Do not silently pick — show the roster.
-7. **Sweeps.** Sweep design inputs headlessly.
-   - Pitfalls: #18.
-8. **Interaction. Direct manipulation, live readouts, slow-mo, replay.**
-   - Pitfalls: #17, #19, #20, #21, #23, #27.
-   - **Mandatory interaction-node gate (before writing drag/collision code):** list the interaction nodes to the user as a table: which mesh is draggable, what follows it (adjacent parts), what triggers collision, what play/replay auto-fires. Wait for user confirmation. The Newton's-cradle lesson: "drag ball i, balls 0..i follow, release to collide" was never stated explicitly — both sides guessed differently and produced a broken interaction.
-9. **PARTS auto-annotation.** Do NOT ask the user which parts to label. Extract key nodes from the build/interaction and auto-annotate.
-10. **Test + report.** tour and build both run clean; report; on user acceptance, lobby auto-adds the new blueprint card.
-    - Pitfalls: #17, #23.
+### User's role vs agent's role
 
-For auditing an existing project instead of starting from a sketch, skip straight to extracting a Spec
-from the code (`source.kind: "code-extraction"`) and rejoin at step 3.
+The user does exactly four things:
+1. Submit the sketch / photo and state what they want to validate.
+2. Answer the intake Q&A checklist (batched, one message).
+3. Approve two confirmation gates (mesh roster, interaction nodes).
+4. Accept the final delivery.
 
-## Execution supervision (once the task is accepted)
+Everything else — setup, build, physics, testing, visual polish, lobby integration,
+self-checks — is the agent's job. Do not ask the user to run commands, test builds,
+or fix styling. Only pause for the three gates below.
 
-After the intake questions are answered, the skill acts as its own orchestrator and runs the workflow
-autonomously to completion. It does not check in with the user between expert steps:
+### Step 0 — Intake & Scaffold
+- **Read pitfalls:** [step0] #1, #2, #15.
+- **Agent does (parallel):**
+  - Workstream A: parse sketch, produce requirements list + numbered Q&A.
+  - Workstream B: copy `template/` to `cases/<slug>/`, drop sketch in `public/`, boot shell.
+- **Output:** `cases/<slug>/docs/intake-questions.md` — the Q&A checklist.
+- **GATE — ask user:** batch the Q&A (max 3 questions per batch). Wait for answers before step 2.
 
-- **Auto-drive steps 3→10** (gate, reference, scaffold, build, verify, sweeps, report). Use headless
-  scripts and self-checks; report progress only at the end (or on a real blocker).
-- **Only pause for two reasons:** (a) a "must ask the user" item from the decision-ownership table — batch
-  it into one message; (b) a "must stop" item — report numbers and options. Never pause on expert decisions.
-- **Self-verify before declaring done:** `test/verify.mjs` passes, rest state settles, no clip/inversion,
-  engine matches reference. If a check fails, fix it yourself — do not hand the user a broken build.
-- **One final summary** when done: what was built, the verdict, assumptions, how to run it.
+### Step 1 — Recognition
+- **Read pitfalls:** [step1] #9, #10.
+- **Agent does:** read sketch part-by-part, output parts/joints/actuators JSON.
+- No user pause.
+
+### Step 2 — Spec
+- **Read pitfalls:** [step2] #2, #14, #37.
+- **Agent does:** write `spec.js`, confirm `scale.status = "OK"`.
+- No user pause (ambiguities already resolved in step 0 Q&A).
+
+### Step 3 — Feasibility Gate
+- **Read pitfalls:** [step3] #3, #4, #5.
+- **Agent does:** run domain gates. If fail, stop and report.
+- **GATE — stop:** if gate fails, report numbers and options. Wait for user.
+
+### Step 4 — Reference Solution
+- **Read pitfalls:** [step4] #11, #24.
+- **Agent does:** analytic or small-integrator reference.
+
+### Step 5 — Scaffold
+- Already done by Workstream B. Only `src/mechanism.js` is new.
+
+### Step 6 — Engine Build
+- **Read pitfalls:** [step6] #6, #7, #8, #12, #13, #16, #22, #24, #26, #37, #38.
+- **Agent does:** build bodies/constraints, cross-check vs reference.
+- **GATE — mesh roster:** after GLB loads (and 3s delay per #37), print mesh table
+  (name / proposed role / pivot). **Wait for user confirmation** before wiring physics.
+  Store the approved roster in `cases/<slug>/docs/mesh-roster.md`.
+
+### Step 7 — Sweeps
+- **Read pitfalls:** [step7] #18.
+- **Agent does:** headless input sweeps.
+
+### Step 8 — Interaction
+- **Read pitfalls:** [step8] #17, #19, #20, #21, #23, #27, #40, #41, #42.
+- **Agent does:** direct manipulation, slow-mo, replay.
+- **GATE — interaction nodes:** list draggable meshes, follow chains, collision triggers,
+  play/replay auto-fires. **Wait for user confirmation.** Store in `cases/<slug>/docs/interaction-nodes.md`.
+
+### Step 9 — PARTS Annotation
+- **Read pitfalls:** [step9] #30.
+- **Agent does:** auto-annotate key nodes. Physics card formulas use user-visible params (#43).
+
+### Step 10 — Visual & Reset
+- **Read pitfalls:** [step10] #38, #39, #42, #9 (reset), #11 (physics card).
+- **Agent does:** apply visual-standards.md verbatim (lighting, desk, panel, banner no-op).
+  Implement `resetAll()` for tour⇄build both directions.
+
+### Step 11 — Lobby Integration & Delivery
+- **Read pitfalls:** [step11] #35, #39, #40.
+- **Agent does:** screenshot sketch, add lobby card, build all cases, write README.
+- **GATE — mechanical audit:** run
+  `node skill/sketch2sim/scripts/audit-case.mjs cases/<slug>`
+  **MUST exit 0** before handoff. This checks spec.json, spec.js wiring,
+  docs/ six artifacts, test/verify.mjs — no reliance on memory.
+- **GATE — final acceptance:** present the running build. Wait for user to accept or list fixes.
+
+### Audit mode
+For an existing project: skip to step 3 (extract spec from code).
+
+## Execution Supervision
+
+After the step 0 Q&A is answered, the agent auto-drives steps 1→11 autonomously:
+- Self-test at every step (headless verify, build passes, no clip).
+- Only pause at the three gates: step 0 Q&A, step 6 mesh roster, step 8 interaction nodes.
+- If a new pitfall is hit mid-build: fix it, write it to `physics-pitfalls.md` with the
+  `[stepN]` tag, and if it is template-level (lighting, panel, reset, lobby), apply it to
+  `template/` in the same commit. This is how information symmetry is maintained.
+- Final summary: what was built, verdict, assumptions, how to run.
 
 ## Decision ownership vs capability boundary (they are different)
 
@@ -183,17 +247,21 @@ Same Spec, reduced fidelity: one sketch, simplified physics, no cross-check. Del
 - `capability-guide.md` — what/what-not this skill validates, the L0-L5 restore ladder
 - `project-delivery.md` — standard project tree, the interactive shell, sketch archiving, self-check (steps 5-10)
 - `architecture-checklist.md` — single source of truth, module boundaries, stale residue
-- `physics-pitfalls.md` — engine and modeling pitfalls, general rules
+- `physics-pitfalls.md` — engine, modeling, and UX pitfalls, general rules (#1-#43)
+- `visual-standards.md` — **canonical lighting rig, desk material, panel layout, banner, physics card** — copy verbatim to every new case
+- `case-onboarding.md` — pre-build, during-build, visual, reset, lobby integration, delivery checklist
 - `audit-checklist.md` — checkable items for building or auditing
-- `template/` — the reusable Vite shell copied into every new project. The shell (scene, camera, panel,
-  tour/build, desk) is reused as-is; each project writes its mechanism, spec, annotations and textures.
+- `template/` — the reusable Vite shell. Lighting, desk, and no-op banner are pre-configured to visual-standards. Each project writes its mechanism, spec, annotations and textures.
 
 ## Status (honest)
 
-Distilled and now stress-tested end-to-end once: a hand-drawn Newton's cradle (two sketches, static +
-action) went through recognition, the ≤3-question expert-then-yes intake, Spec, analytic reference, build,
-and headless cross-check in one run. That run produced two new pitfalls (#24 suspended pendulum chains,
-#25 resting contact is the default) and the object-role model (dynamic actor / static world prop /
-visual-follow). Earlier builds were rigid-linkage and arm cases, partly from extracted code.
-Not yet exercised: overlay fidelity on a dimensioned engineering drawing; sweeps across the full input grid;
-a genuinely new physics domain beyond the catalog. Treat every reference as a draft the next real case corrects.
+Distilled and stress-tested end-to-end twice:
+- **Trebuchet** — the original worked example, went through audit fixes V2-V5.
+- **Newton's cradle** — second case, validated the workflow but surfaced 7 new UX pitfalls
+  (#37-#43): post-load bounding-box timing, standardized lighting rig, fake contact shadows
+  for stacked flat objects, drag-vs-click distinction, per-object material/mass switching,
+  hover lift height, and physics card formula style. These are now in `visual-standards.md`
+  and `case-onboarding.md`.
+Not yet exercised: overlay fidelity on a dimensioned engineering drawing; sweeps across the
+full input grid; a genuinely new physics domain beyond the catalog. Treat every reference as
+a draft the next real case corrects.

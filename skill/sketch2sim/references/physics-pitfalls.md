@@ -1,7 +1,13 @@
 # Physics pitfalls
 
-General engine and modeling rules. Each states the failure, the general fix, and how to check it.
+General engine, modeling and UX rules. Each states the failure, the general fix, and how to check it.
 Evidence tags: **[code]** read in a build, **[solver]** measured, **[inferred]** reasoned not observed.
+
+**Step tags:** each pitfall belongs to one or more workflow steps. Before starting a step,
+read all pitfalls tagged `[stepN]` for that step (N = 0..11 per SKILL.md Workflow).
+When adding a new pitfall, assign the step tag(s) where the problem was discovered.
+Template-level pitfalls (lighting, panel, reset, lobby) must also be applied to `template/`
+in the same commit so the next case starts correct.
 
 > Maintenance: this list grows from real projects. New pitfalls land here after a case survives them
 > (see `docs/skill-feedback/`). Users may also contribute their own lessons; contributions are welcome
@@ -303,3 +309,76 @@ Switching between TOUR and BUILD must reset state in BOTH directions:
   paper sketch + cutout + pencil/eraser. If the user was mid-tour on step 2 (white clay),
   clicking BUILD must NOT leave them in white clay mid-animation.
 Both directions must also pause any running physics (tour auto-play) and clear tweens.
+
+## #37 [step6] Measure GLB bounds after load, not immediately
+
+A GLTF/GLB `onLoad` fires when the file arrives, but child meshes may not have
+their world transforms computed yet. If you measure Box3 to space parts (e.g.
+aligning 5 balls in a Newton's cradle), the first measurement gives wrong
+edge positions and parts end up with uneven gaps. Fix: **delay 3 seconds after
+GLB load**, then measure Box3 against a known center anchor and reposition.
+Symptom: "balls 0-1 touch, 1-2 have a gap, 3-4 touch" — uneven spacing.
+
+## #38 [step10][template] Standardized lighting — copy verbatim
+
+Every case must use the exact light rig in `visual-standards.md`:
+ambient 0xffeed9/0.95, sun 0xfffaec/2.3 at (-2.5,4.5,3.2), fill 0xdce7f6/0.6 at
+(3,2,-1), shadow bias -0.0002/radius 12/blurSamples 16, desk color 0xd9b98c.
+Symptom of drift: one case looks warm and another looks washed-out/gray.
+When adding a new case, copy the rig from an existing shipped case — do not
+"improve" the numbers.
+
+## #39 [step11] Stacked flat objects need fake contact shadows
+
+Two thin planes (papers, cards) lying 3-20mm apart do NOT cast reliable
+real-time shadows on each other — the shadow map resolution (2048 over ~5m)
+is too coarse for sub-cm gaps, and PCF blur eats the shadow. Fix: add a
+canvas-generated soft shadow plane (blurred rounded rect, black 35% opacity,
+offset ~20-30mm in the shadow direction) as a child of the upper object.
+Real-time shadows still work on the desk, but the inter-object shadow must be faked.
+
+## #40 [step8] Drag vs click must be distinguished
+
+If an object is both draggable AND clickable (e.g. lobby blueprint cards that
+navigate on click), a simple click must not trigger the navigation guard.
+Track a `dragMoved` flag: set it true only when the pointer moves >~1cm during
+mousedown. On mouseup, only set `_justDragged = true` if `dragMoved` was set.
+Otherwise a plain click (mousedown+mouseup without movement) is treated as a drag
+and the navigation never fires.
+
+## #41 [step8] Per-object material + mass switching
+
+When a case supports switching individual objects between materials (e.g. steel
+vs plastic balls), define a density table and compute mass from volume:
+steel 7850 kg/m³, plastic 1050 kg/m³. Use mass-weighted collision formulas, not
+the equal-mass velocity-exchange simplification. Prefer procedural materials
+(color + roughness) over external EXR/HDR textures — they load instantly and
+don't need compression. Only use EXR env maps for reflective metal; matte
+materials need no env map.
+
+## #42 [step10] Hover lift height balance
+
+When hovering an object lifts it (e.g. a card on a desk), the lift height must
+be: high enough to cast a visible contact shadow on the object below, but low
+enough that nearby props (pencil, eraser) don't look sunken. Sweet spot:
+resting gap 3-5mm, hover lift 20-25mm. Lifts >40mm look like floating.
+
+## #43 [step9] Physics card formulas must use user-visible parameters
+
+The physics info card is for the user, not the professor. Write equations in
+terms of sliders the user actually moves: "v_cup = ω × L = 4 × v_cw",
+"m_c·g·Δh → ½·I·ω²". Do NOT write academic notation (T₁, α, β, I₀) that
+requires a legend. List the actual parameter ranges (g=9.82, CW 1.4-10kg, etc).
+
+
+## #44 [step6] Objects pass through each other — missing colliders
+**Symptom:** Dynamic balls/arms visually clip through walls, beams, or each other.
+Repeated across trebuchet and newton-cradle, costing multiple fix cycles.
+**Cause:** Meshes were listed in the roster as "dynamic" or "static" but no physics
+collider was actually created for them. The visual model exists, the physics body does not.
+**Fix:** Before leaving step 6, audit every mesh in the roster:
+- Dynamic mesh → does it have a collider shape + mass?
+- Static boundary (wall, floor, beam) that a dynamic object can hit → does it have a static collider?
+- Visual-follow (rope, cable) → no collider needed, OK.
+If a dynamic object can cross a visual boundary, that boundary needs a collider
+OR an explicit clamp (e.g. pendulum angle limit). Verify headless, not by eye.

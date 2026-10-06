@@ -17,6 +17,7 @@ export class Environment {
     const tableGeom = new THREE.PlaneGeometry(10, 8);
     const tableMat = new THREE.MeshStandardMaterial({
       map: woodTableTexture,
+      color: 0xd9b98c, // warm wood tone, kills gray-green cast
       roughness: 0.55,
       metalness: 0.05,
     });

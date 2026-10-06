@@ -1,23 +1,19 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>sketch2sim app</title>
+<title>sketch2sim</title>
 <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
 <div id="canvas-container"></div>
 
-<div id="tour-banner" class="tour-banner hidden">
-  <span id="tour-banner-text"></span>
-</div>
-
 <div id="bottom-bar">
   <div class="bottom-left">
     <h1 id="app-title">Mechanism</h1>
     <div class="nav-buttons">
-      <button id="btn-play-tour" class="btn primary">▶ Tour</button>
+      <button id="btn-play-tour" class="btn primary">▶ Play the tour</button>
       <button id="btn-build" class="btn secondary">Build it yourself</button>
     </div>
     <div class="view-buttons">
@@ -30,7 +26,6 @@
   </div>
 
   <div id="build-panel" class="build-panel hidden">
-    <div id="stats-grid" class="stats-grid"></div>
     <div id="param-section" class="panel-section"></div>
     <div class="panel-section">
       <button id="btn-action" class="action-btn primary">Action</button>
@@ -40,7 +35,6 @@
   </div>
 </div>
 
-<div id="drag-hint" class="drag-hint hidden"></div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

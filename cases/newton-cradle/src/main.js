@@ -37,10 +37,14 @@ class App {
       + '<div style="font-size:14px;font-weight:700;margin-top:2px;">Physics Info</div>'
       + '<div style="margin-top:8px;font-size:10px;color:#8b6f47;">Pendulum Equation</div>'
       + '<div style="font-family:Georgia,serif;font-style:italic;font-size:13px;margin:2px 0 8px 0;">θ̈ = −(g/L) sinθ</div>'
-      + '<div style="font-size:10px;color:#8b6f47;">Collision</div>'
-      + '<div style="font-family:Georgia,serif;font-style:italic;font-size:13px;margin:2px 0 8px 0;">v₁′ = v₂, v₂′ = v₁</div>'
+      + '<div style="font-size:10px;color:#8b6f47;">Collision (elastic, mass-weighted)</div>'
+      + '<div style="font-family:Georgia,serif;font-style:italic;font-size:12px;margin:2px 0 2px 0;">v₁′ = ((m₁−em₂)/(m₁+m₂))v₁ + ((1+e)m₂/(m₁+m₂))v₂</div>'
+      + '<div style="font-family:Georgia,serif;font-style:italic;font-size:12px;margin:2px 0 4px 0;">v₂′ = ((1+e)m₁/(m₁+m₂))v₁ + ((m₂−em₁)/(m₁+m₂))v₂</div>'
+      + '<div style="font-size:10px;color:#6b5f47;margin:4px 0 8px 0;">Equal mass → velocity swap</div>'
       + '<div style="font-size:10px;color:#8b6f47;">V-Rope Constraint</div>'
       + '<div style="font-family:Georgia,serif;font-style:italic;font-size:13px;margin:2px 0 8px 0;">two strings confine ball to 2D plane</div>'
+      + '<div style="font-size:10px;color:#8b6f47;">Materials (density kg/m³)</div>'
+      + '<div style="font-family:Georgia,serif;font-style:italic;font-size:13px;margin:2px 0 8px 0;">steel 7850 · plastic 1050 (≈1/7.5 mass)</div>'
       + '<div style="font-size:10px;color:#8b6f47;">Restitution</div>'
       + '<div style="font-family:Georgia,serif;font-style:italic;font-size:13px;margin:2px 0 0 0;">e = 0.97</div>';
     document.body.appendChild(this.physicsCard);
@@ -48,6 +52,8 @@ class App {
     // Click title to show card 5s.
     const brandTitle = document.getElementById('brand-title');
     if (brandTitle) brandTitle.addEventListener('click', () => this.showPhysicsCard(5000));
+    const brandTag = document.getElementById('brand-tag');
+    if (brandTag) brandTag.addEventListener('click', () => this.showPhysicsCard(5000));
 
     this.scrubberProgress = document.getElementById('scrubber-progress');
     this.scrubberThumb = document.getElementById('scrubber-thumb');
@@ -83,7 +89,7 @@ class App {
 
     this.initThree();
     this.initEnvironment();
-    this.mechanism = new NewtonCradleModel(this.scene, () => {
+    this.mechanism = new NewtonCradleModel(this.scene, this.renderer, () => {
       // glb finished loading + whitened: re-gate buttons so MODEL becomes available.
       this.updateTourStepAvailability();
     });
@@ -91,6 +97,7 @@ class App {
 
     this.clock = new THREE.Clock();
     this._initDrag();
+    this._initMaterialButtons();
     this.animate();
 
     this.resetToFirstFrame();
@@ -356,6 +363,12 @@ class App {
     this.setPlayButtonState(false);
     this.setSlowMo(false);
 
+    // Full reset: physics + ball materials back to steel.
+    if (this.mechanism && this.mechanism.modelBuilt) {
+      this.mechanism.resetAll();
+    }
+    this._resetMaterialButtons();
+
     // Paper sketch on, pencil/eraser out; hide cutout + 3D model.
     this.environment.showPaperSketch();
     if (this.mechanism) {
@@ -370,6 +383,7 @@ class App {
 
     this.buildPanel.classList.add('hidden');
     this.dragHint.classList.add('hidden');
+    if (this.physicsCard) this.physicsCard.style.opacity = '0';
     this.playerScrubber.classList.remove('hidden');
     this.updateScrubber(0, '00:00');
     this.updateNavButtons('tour');
@@ -468,7 +482,9 @@ class App {
   showPhysicsCard(ms = 2500) {
     this.physicsCard.style.opacity = '1';
     if (this._physicsCardTimer) clearTimeout(this._physicsCardTimer);
-    this._physicsCardTimer = setTimeout(() => { this.physicsCard.style.opacity = '0'; }, ms);
+    if (ms > 0) {
+      this._physicsCardTimer = setTimeout(() => { this.physicsCard.style.opacity = '0'; }, ms);
+    }
   }
 
   async playTourFrom(startStep, singleStep = null) {
@@ -600,14 +616,11 @@ class App {
         await sleep(300);
       }
 
-      // Step 4 — PHYSICS: static arrangement + explanation card.
+      // Step 4 — PHYSICS: static arrangement + explanation card (stays through PLAY/REPLAY).
       if (avail[4] && startStep <= 4 && (singleStep === null || singleStep === 4)) {
         this.showTourBanner('Physics: equal-mass elastic collision swaps velocity. V-ropes constrain to 2D plane.');
         this.mechanism.reset();
-        this.showPhysicsCard(2500);
-      }
-      if (startStep <= 5 || (singleStep !== null && singleStep >= 5)) {
-        if (this.physicsCard) this.physicsCard.style.opacity = '0';
+        this.showPhysicsCard(0); // persistent until build
       }
 
       // Step 5 — PLAY: Ball_0 pulled left, released, full round-trip, then resets.
@@ -615,27 +628,28 @@ class App {
         this.showTourBanner('PLAY: Ball_0 swings left, hits. Wave travels right, Ball_4 pops. Ball_4 rebounds, hits back, Ball_0 pops. Then settles to rest.');
         this.setCameraView('Hero', 800);
         await sleep(1000);
-        this.mechanism.reset();
+        this.mechanism.resetAll();
         await sleep(300);
         await this.mechanism.pullAndRelease(0, -THREE.MathUtils.degToRad(20), 0);
         await sleep(2000);
-        this.mechanism.reset();
+        this.mechanism.resetAll();
       }
 
       // Step 6 — REPLAY: 0.25× slow motion of the same round-trip.
       if (avail[6] && startStep <= 6 && (singleStep === null || singleStep === 6)) {
         this.showTourBanner('REPLAY: 0.25× slow motion. Watch the momentum wave transfer.');
         this.setSlowMo(true);
-        this.mechanism.reset();
+        this.mechanism.resetAll();
         await sleep(500);
         await this.mechanism.pullAndRelease(0, -THREE.MathUtils.degToRad(20), 0);
         await sleep(4000);
         this.setSlowMo(false);
-        this.mechanism.reset();
+        this.mechanism.resetAll();
       }
 
       // Step 7 — BUILD: switch to build panel, Side view.
       if (avail[7] && startStep <= 7 && (singleStep === null || singleStep === 7)) {
+        if (this.physicsCard) this.physicsCard.style.opacity = '0';
         if (singleStep === null) {
           // Full tour ends: hand off to build mode.
           this.showBuildPanel();
@@ -654,7 +668,7 @@ class App {
   }
 
   // ------------------------------------------------------------------- misc
-  showTourBanner(text) { this.tourBannerText.textContent = text; this.tourBanner.classList.remove('hidden'); }
+  showTourBanner(/* text */) { this.tourBanner.classList.add('hidden'); }
   hideTourBanner() { this.tourBanner.classList.add('hidden'); }
 
   updateScrubber(progress, timeStr) {
@@ -693,8 +707,12 @@ class App {
     this.setPlayButtonState(false);
     this.setSlowMo(false);
     this.tourBanner.classList.add('hidden');
+    if (this.physicsCard) this.physicsCard.style.opacity = '0';
     this.environment.hidePaperSketch();
     if (this.cutoutMesh) this.cutoutMesh.visible = false;
+    // Full reset: physics + ball materials back to steel.
+    this.mechanism.resetAll();
+    this._resetMaterialButtons();
     // Show the 3D cradle with real materials.
     this.mechanism.group.visible = true;
     this.mechanism.group.scale.z = 1.0;
@@ -719,6 +737,42 @@ class App {
     this.btnBuildYourself.addEventListener('click', () => { sound.init(); this.showBuildPanel(); });
 
     this.btnToggleSlowMo.addEventListener('click', () => this.setSlowMo(!this.slowMotion));
+
+    // Angle sliders for bidirectional experiment.
+    const sliderL = document.getElementById('slider-angle-l');
+    const sliderR = document.getElementById('slider-angle-r');
+    const valL = document.getElementById('val-angle-l');
+    const valR = document.getElementById('val-angle-r');
+    const linkChk = document.getElementById('slider-link');
+    const rad = (deg) => deg * Math.PI / 180;
+    sliderL.addEventListener('input', () => {
+      valL.textContent = sliderL.value + '°';
+      if (linkChk.checked) { sliderR.value = sliderL.value; valR.textContent = sliderR.value + '°'; }
+    });
+    sliderR.addEventListener('input', () => {
+      valR.textContent = sliderR.value + '°';
+      if (linkChk.checked) { sliderL.value = sliderR.value; valL.textContent = sliderL.value + '°'; }
+    });
+
+    this._bidirK = 1;
+    const btnBidir1 = document.getElementById('btn-bidir1');
+    if (btnBidir1) btnBidir1.addEventListener('click', () => {
+      sound.init();
+      this._bidirK = 1;
+      this.mechanism.bidirectionalExperiment(rad(+sliderL.value), rad(+sliderR.value), 1);
+    });
+    const btnBidir2 = document.getElementById('btn-bidir2');
+    if (btnBidir2) btnBidir2.addEventListener('click', () => {
+      sound.init();
+      this._bidirK = 2;
+      this.mechanism.bidirectionalExperiment(rad(+sliderL.value), rad(+sliderR.value), 2);
+    });
+    const btnBidirPlay = document.getElementById('btn-bidir-play');
+    if (btnBidirPlay) btnBidirPlay.addEventListener('click', () => {
+      sound.init();
+      this.mechanism.reset();
+      this.mechanism.pullAndRelease(0, -THREE.MathUtils.degToRad(20), 0);
+    });
 
     this.btnReset.addEventListener('click', () => {
       this.mechanism.reset();
@@ -785,7 +839,8 @@ class App {
   _initDrag() {
     const ray = new THREE.Raycaster();
     const ptr = new THREE.Vector2();
-    let dragging = null;
+    // Map pointerId -> ballIndex for multi-touch bidirectional dragging.
+    const activePointers = new Map();
     const setPtr = (e) => {
       ptr.x = (e.clientX / window.innerWidth) * 2 - 1;
       ptr.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -799,21 +854,58 @@ class App {
       if (hit) {
         const idx = balls.indexOf(hit.object);
         this.mechanism.beginDrag(idx);
+        activePointers.set(e.pointerId, idx);
         this.renderer.domElement.setPointerCapture(e.pointerId);
       }
     });
     this.renderer.domElement.addEventListener('pointermove', (e) => {
-      if (this.mechanism.dragIndex < 0) return;
+      const dragIdx = activePointers.get(e.pointerId);
+      if (dragIdx === undefined) return;
       setPtr(e);
       ray.setFromCamera(ptr, this.camera);
       const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
       const p = new THREE.Vector3();
       if (!ray.ray.intersectPlane(plane, p)) return;
-      this.mechanism.moveDragToX(p.x, p.y);
+      this.mechanism.moveDragToX(p.x, p.y, dragIdx);
     });
-    this.renderer.domElement.addEventListener('pointerup', () => {
-      if (this.mechanism.dragIndex >= 0) this.mechanism.endDrag();
-    });
+    const endPointer = (e) => {
+      const dragIdx = activePointers.get(e.pointerId);
+      if (dragIdx !== undefined) {
+        this.mechanism.endDrag(dragIdx);
+        activePointers.delete(e.pointerId);
+      }
+    };
+    this.renderer.domElement.addEventListener('pointerup', endPointer);
+    this.renderer.domElement.addEventListener('pointercancel', endPointer);
+  }
+
+  _initMaterialButtons() {
+    const row = document.getElementById('ball-material-row');
+    if (!row) return;
+    this._matBtns = [];
+    for (let i = 0; i < 5; i++) {
+      const btn = document.createElement('button');
+      btn.textContent = i + 1;
+      btn.title = `Ball ${i+1}: click to toggle metal/plastic`;
+      btn.style.cssText = 'flex:1;height:24px;padding:0;font-size:10px;border-radius:4px;border:1px solid rgba(180,168,150,0.4);background:#c8ccd2;cursor:pointer;color:#333;font-weight:600;display:flex;align-items:center;justify-content:center;';
+      btn.addEventListener('click', () => {
+        const cur = this.mechanism.ballTypes[i];
+        const next = cur === 'steel' ? 'plastic' : 'steel';
+        this.mechanism.setBallMaterial(i, next);
+        btn.style.background = next === 'steel' ? '#c8ccd2' : '#d4a017';
+        btn.title = `Ball ${i+1}: ${next === 'steel' ? 'metal' : 'plastic'}`;
+      });
+      row.appendChild(btn);
+      this._matBtns.push(btn);
+    }
+  }
+
+  _resetMaterialButtons() {
+    if (!this._matBtns) return;
+    for (const btn of this._matBtns) {
+      btn.style.background = '#c8ccd2';
+      btn.title = '';
+    }
   }
 }
 

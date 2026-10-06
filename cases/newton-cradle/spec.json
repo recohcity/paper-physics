@@ -1,0 +1,25 @@
+{
+  "name": "newton-cradle",
+  "scale": { "status": "OK", "anchor": "1 scene unit = 1 m" },
+  "world": { "gravity": 9.81 },
+  "physics": {
+    "pendulumLength": 0.343,
+    "ballRadius": 0.0247,
+    "restitution": 0.97,
+    "airDrag": 0.01,
+    "angleLimit": 1.5508
+  },
+  "materials": {
+    "steel": { "density": 7850, "color": "chrome", "roughness": 0.15 },
+    "plastic": { "density": 1050, "color": "0xd4a017", "roughness": 0.55 }
+  },
+  "geometry": {
+    "ballCount": 5,
+    "groupOrigin": { "x": 0.12, "y": 0, "z": 0 }
+  },
+  "inputs": [
+    { "key": "angleL", "label": "Left angle", "min": 5, "max": 60, "step": 1, "value": 34 },
+    { "key": "angleR", "label": "Right angle", "min": 5, "max": 60, "step": 1, "value": 34 },
+    { "key": "ballCount", "label": "Balls", "min": 1, "max": 2, "step": 1, "value": 1 }
+  ]
+}

@@ -145,8 +145,9 @@
     sunLight.shadow.camera.right = 2.8;
     sunLight.shadow.camera.top = 2.8;
     sunLight.shadow.camera.bottom = -2.8;
-    sunLight.shadow.bias = -0.0004;
-    sunLight.shadow.radius = 3.0;
+    sunLight.shadow.bias = -0.0002;
+    sunLight.shadow.radius = 12;
+    sunLight.shadow.blurSamples = 16;
     scene.add(sunLight);
 
     const fillLight = new THREE.DirectionalLight(0xdce7f6, 0.6);
@@ -198,9 +199,6 @@
     // pencil / eraser: drag to pick up, move, release = drop with gravity
     const pencil = env.pencilGroup;
     const eraser = env.eraserGroup;
-    let dragging = null;
-    let dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    let dragOffset = new THREE.Vector3();
 
     function pickProp(e) {
       pointer.x = (e.clientX / innerWidth) * 2 - 1;
@@ -213,18 +211,63 @@
       return obj;
     }
 
+    let dragging = null;
+    let dragMode = null; // 'move' | 'rotate'
+    let dragMoved = false;
+    let dragStartPos = new THREE.Vector3();
+    let dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    let dragOffset = new THREE.Vector3();
+    let dragCenter = new THREE.Vector3();
+    let dragStartAngle = 0;
+
+    function pickCard(e) {
+      pointer.x = (e.clientX / innerWidth) * 2 - 1;
+      pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(clickableMeshes, false);
+      return hits.length ? hits[0].object.parent : null;
+    }
+
     renderer.domElement.addEventListener('mousedown', (e) => {
       const p = pickProp(e);
       if (p) {
         dragging = p;
+        dragMoved = false;
+        dragStartPos.copy(p.position);
         dragPlane.constant = -p.position.y;
         const hitPoint = new THREE.Vector3();
         raycaster.ray.intersectPlane(dragPlane, hitPoint);
-        dragOffset.copy(p.position).sub(hitPoint);
-        // pickup: lift up + lighten shadow
-        p.userData.baseY = p.position.y;
-        p.position.y = p.userData.baseY + 0.1;
+        if (e.shiftKey) {
+          dragMode = 'rotate';
+          dragCenter.copy(p.position);
+          dragStartAngle = Math.atan2(hitPoint.z - dragCenter.z, hitPoint.x - dragCenter.x) - p.rotation.y;
+        } else {
+          dragMode = 'move';
+          dragOffset.copy(p.position).sub(hitPoint);
+        }
+        p.position.y = 0.02;
         p.traverse(o => { if (o.material) o.material.opacity = 0.9; });
+        playPickup();
+        return;
+      }
+      const card = pickCard(e);
+      if (card) {
+        dragging = card;
+        dragMoved = false;
+        dragStartPos.copy(card.position);
+        dragPlane.constant = -card.position.y;
+        const hitPoint = new THREE.Vector3();
+        raycaster.ray.intersectPlane(dragPlane, hitPoint);
+        if (e.shiftKey) {
+          dragMode = 'rotate';
+          dragCenter.copy(card.position);
+          dragStartAngle = Math.atan2(hitPoint.z - dragCenter.z, hitPoint.x - dragCenter.x) - card.rotation.y;
+        } else {
+          dragMode = 'move';
+          dragOffset.copy(card.position).sub(hitPoint);
+        }
+        card.position.y = 0.025;
+        hovered = null;
         playPickup();
       }
     });
@@ -236,31 +279,40 @@
       if (dragging) {
         const hitPoint = new THREE.Vector3();
         raycaster.ray.intersectPlane(dragPlane, hitPoint);
-        dragging.position.x = hitPoint.x + dragOffset.x;
-        dragging.position.z = hitPoint.z + dragOffset.z;
-        if (hovered) { hovered = null; cardGroups.forEach(g => g.userData.targetY = 0.001); }
+        if (dragMode === 'move') {
+          const nx = hitPoint.x + dragOffset.x, nz = hitPoint.z + dragOffset.z;
+          if (Math.abs(nx - dragStartPos.x) > 0.01 || Math.abs(nz - dragStartPos.z) > 0.01) dragMoved = true;
+          dragging.position.x = nx;
+          dragging.position.z = nz;
+        } else {
+          const ang = Math.atan2(hitPoint.z - dragCenter.z, hitPoint.x - dragCenter.x);
+          dragging.rotation.y = ang - dragStartAngle;
+          dragMoved = true;
+        }
         return;
       }
       const p = pickProp(e);
       renderer.domElement.style.cursor = p ? 'grab' : 'default';
-      if (p) { hovered = null; return; } // over prop: no card lift
+      if (p) { return; }
       const hits = raycaster.intersectObjects(clickableMeshes, false);
       const target = hits.length ? hits[0].object.parent : null;
       if (hovered !== target) {
         hovered = target;
         if (hovered) playPaper();
         cardGroups.forEach((g) => {
-          g.userData.targetY = (g === hovered) ? 0.02 : 0.001;
+          g.userData.targetY = (g === hovered) ? 0.025 : g.userData.baseY - 0.001;
         });
       }
     });
 
     window.addEventListener('mouseup', () => {
       if (dragging) {
-        dragging.userData.dropY = dragging.userData.baseY || 0.02;
+        dragging.userData.targetY = dragging.userData.baseY;
         dragging.userData.playDrop = true;
+        if (dragMoved) window._justDragged = true;
         dragging = null;
-        window._justDragged = true;
+        dragMode = null;
+        dragMoved = false;
       }
     });
 
@@ -303,16 +355,46 @@
 
     const isLocal = location.hostname === 'localhost';
     const cardDefs = [
-      { url: isLocal ? 'http://localhost:5173/' : '/cases/trebuchet/dist/', x: -0.75, z: 0.35, yaw: -0.62, tex: trebuchetTex },
-      { url: isLocal ? 'http://localhost:5174/' : '/cases/newton-cradle/dist/', x: 0.55, z: 0.15, yaw: 0.12, tex: sketchTex },
+      { url: isLocal ? 'http://localhost:5174/' : '/cases/newton-cradle/dist/', x: -0.45, z: 0.45, yaw: -0.32, tex: sketchTex, y: 0.004 },
+      { url: isLocal ? 'http://localhost:5173/' : '/cases/trebuchet/dist/', x: 0.7, z: 0.3, yaw: 0.2, tex: trebuchetTex, y: 0.001 },
     ];
 
     const clickableMeshes = [];
     const cardGroups = [];
+    // Soft contact-shadow texture: black rounded rect fading to transparent
+    function makeShadowTexture() {
+      const s = 256;
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = s;
+      const ctx = cv.getContext('2d');
+      const pad = 20, r = 12;
+      // outer blur via multiple strokes
+      ctx.filter = 'blur(12px)';
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(pad, pad, s - pad * 2, s - pad * 2);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+    const shadowTex = makeShadowTexture();
+
     cardDefs.forEach((c) => {
       const group = new THREE.Group();
-      group.position.set(c.x, 0.001, c.z);
+      group.position.set(c.x, c.y, c.z);
+      group.userData.baseY = c.y;
       group.rotation.y = c.yaw;
+
+      // Fake contact shadow: slightly larger dark plane just below the card
+      const shadowMat = new THREE.MeshBasicMaterial({
+        map: shadowTex, transparent: true, depthWrite: false, opacity: 0.8,
+      });
+      const shadowMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(CARD_W + 0.08, CARD_H + 0.08), shadowMat);
+      shadowMesh.rotation.x = -Math.PI / 2;
+      shadowMesh.position.y = -0.002; // just below card surface
+      shadowMesh.position.x = 0.02;  // offset in shadow direction
+      shadowMesh.position.z = -0.03;
+      group.add(shadowMesh);
 
       const mat = new THREE.MeshStandardMaterial({
         map: c.tex,
@@ -325,6 +407,8 @@
       mesh.receiveShadow = true;
       mesh.castShadow = true;
       mesh.userData.url = c.url;
+      mesh.renderOrder = c.url.includes('newton') ? 2 : 1;
+      shadowMesh.renderOrder = c.url.includes('newton') ? 1 : 0;
       group.add(mesh);
 
       scene.add(group);
@@ -357,7 +441,7 @@
     function animate() {
       requestAnimationFrame(animate);
       cardGroups.forEach((g) => {
-        const target = g.userData.targetY ?? 0.001;
+        const target = g.userData.targetY ?? g.userData.baseY;
         g.position.y += (target - g.position.y) * 0.1;
       });
       // pencil / eraser drop gravity

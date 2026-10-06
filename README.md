@@ -1,31 +1,20 @@
-# sketch2sim — 草图转物理仿真
+# paper-physics
 
-![Lobby](src/sketch2sim.png)
+![banner](docs/assets/banner.png)
 
 手绘一张草图，几秒后变成一个可交互的 3D 物理 demo。
 
-## 它是什么
+## 已完成案例
 
-sketch2sim 是一个从草图到仿真的自动化工作流。你只需要：
+| 案例 | 物理特性 |
+|---|---|
+| **投石机** | 4:1 杠杆配重驱动，cannon-es 刚体物理，参数化配重/球重/拉角，积木击倒 |
+| **牛顿摆** | V 绳双摆约束，质量加权弹性碰撞，钢/塑材质切换（密度表），双向对撞实验 |
 
-1. 画一张机构草图（牛顿摆、投石机、机械臂…）
-2. 上传图片
-3. 等待 —— 你会得到一个完整的可运行项目：
-   - **SKETCH**：草图平铺在 A4 纸上
-   - **LIFT**：2D 草图立起成 3D
-   - **MODEL**：白模拉宽成形
-   - **MATERIAL**：材质恢复
-   - **INTERACTION**：真实物理让模型动起来
+## 工作流
 
-## 为什么做
-
-大多数物理仿真工具要么要专业 CAD 软件，要么要写大量代码。sketch2sim 把这条路压缩成：**画 → 跑 → 玩**。
-
-适合：
-- 学生做物理课作业 / 课题验证
-- 发明者快速验证机构想法
-- 老师做交互式教学素材
-- 任何人有个"小发明"想法想先跑跑看
+提交图纸 → 回答 3 个确认门（需求/Mesh清单/交互节点）→ 自动构建 → 验收。
+全程无需用户写代码或测试。
 
 ## 核心原则
 
@@ -33,16 +22,13 @@ sketch2sim 是一个从草图到仿真的自动化工作流。你只需要：
 - **物理来自刚体，不是手写公式**：改臂长，结果跟着变
 - **可行性先于 UI**：跑不通的设计几分钟就毙掉
 - **声明什么没建模**：刚体不覆盖强度/疲劳/流体，如实说明
-
-## 在线体验
-
-大厅：[paper-trebuchet.vercel.app](https://paper-trebuchet.vercel.app)
+- **灯光/桌面/面板标准化**：所有案例共用同一套视觉基线
 
 ## 本地运行
 
 ```bash
-git clone https://github.com/recohcity/paper-trebuchet.git
-cd paper-trebuchet
+git clone https://github.com/recohcity/paper-physics.git
+cd paper-physics
 ./dev.sh
 ```
 
@@ -52,11 +38,11 @@ cd paper-trebuchet
 
 ```
 cases/
+├── lobby/          # 大厅入口（可拖拽图纸卡片进入各案例）
 ├── trebuchet/      # 投石机
-├── newton-cradle/  # 牛顿摆
-└── lobby/          # 大厅入口
+└── newton-cradle/  # 牛顿摆
 skill/
-└── sketch2sim/     # 可复用模板 + 规范
+└── sketch2sim/     # 可复用模板 + 规范（12步工作流、44条pitfalls、视觉标准、门禁脚本）
 ```
 
 ## License

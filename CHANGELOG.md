@@ -2,6 +2,69 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] — Project rename + mechanical audit gate + docs backfill (2026-10-06)
+
+### Rename
+- Project renamed from `paper-trebuchet` to `paper-physics` (now a sketch-to-simulation platform, not just a trebuchet demo)
+- GitHub repo: `recohcity/paper-physics`
+- Vercel deployment auto-follows
+
+### Mechanical delivery gate
+- **`scripts/audit-case.mjs`**: exit 0/1 gate script. Checks spec.json, spec.js wiring, docs/ six artifacts, test/verify.mjs — no reliance on memory.
+- **Step 11 gate** in SKILL.md: audit-case.mjs must exit 0 before handoff
+- **case-onboarding.md**: script-checked items marked, human review only subjective items
+
+### Docs backfill
+- Newton's cradle: spec.json + docs/ six files + test/verify.mjs — now passes audit
+- Trebuchet: spec.json + docs/ six files + test/verify.mjs — now passes audit
+- **mesh-roster-format.md**: required mesh classification (dynamic/static/visual-follow), no-pass-through rule
+- **Pitfall #44**: objects passing through each other (missing colliders)
+
+### Template cleanup
+- Template aligned to newton-cradle baseline, zero model-specific code
+- Removed stats-grid (data cards), added textures.js, warm desk lighting
+
+## [0.4.0] — Newton's cradle full completion + cross-case visual alignment + skill v2 (2026-10-06)
+
+### Newton's cradle case
+- **双向实验**：L/R 角度独立滑块（5°–60°）+ Sync 联动，1 ball / 2 balls 对撞
+- **材质+质量切换**：5 球独立切换钢（7850 kg/m³）/ 琥珀塑料（1050 kg/m³，约 1/7.5），质量加权弹性碰撞公式
+- **音效区分**：钢-钢清脆 thump，含塑料球时闷响 sine 低频
+- **面板两卡片布局**：Bidirectional（角度+球数）和 Material+Playback（MAT 按钮+Slow/Play/Reset+🔊），左右并排
+- **球间距校准**：GLB 加载后延迟 3s 用 Box3 测包围盒，5 球紧贴
+- **Tour/build 复位**：切换时 resetAll() 清物理+材质+拖拽；Physics 卡片 PHYSICS 步出现后持续到 BUILD
+- **README**：聚焦物理特性和交互，弱化架构
+
+### Lobby
+- **图纸卡片可拖拽/旋转**：左键移动，Shift+拖动旋转，点击跳转（dragMoved 区分拖拽vs点击）
+- **假接触阴影**：堆叠图纸重叠区用 canvas 生成柔和阴影，不依赖实时阴影
+- **卡片高度分层**：底层 y=0.001，上层 y=0.004，hover 抬到 25mm，另一张微降 1mm 按压感
+- **卡片对齐修复**：URL/纹理对应修正，renderOrder 强制上层置顶
+
+### 跨案例视觉标准化
+- **灯光统一**：ambient 0xffeed9/0.95, sun 0xfffaec/2.3/(-2.5,4.5,3.2), fill 0xdce7f6/0.6/(3,2,-1)
+- **阴影参数**：2048 map, bias -0.0002, radius 12, blurSamples 16
+- **桌面材质**：color 0xd9b98c warm tint（lobby 和 trebuchet 补上，原来偏白）
+- **Tour banner**：全部改为 no-op，不显示文字提示
+
+### Trebuchet
+- Tour 提示栏删除（no-op banner）
+- Physics 卡片公式改为用户可见参数（4:1 Lever / Energy Conversion / Trajectory / Parameters）
+- README 重写聚焦物理特性
+
+### Skill v2 改造
+- **12 步工作流**（0-11），每步标注必读 pitfalls [stepN] 标签
+- **3 个用户确认门**：intake Q&A / mesh roster / interaction nodes，文档存 docs/
+- **新增 references**：visual-standards.md（灯光/桌面/面板标准）、case-onboarding.md（23项交付清单）
+- **新增 pitfalls #37-#43**：GLB延迟测量、灯光复制、假接触阴影、拖拽vs点击、材质切换、hover高度、物理卡片公式风格
+- **template 纯净化**：以牛顿摆为基线，无任何模型特有代码，新 case 只写 mechanism.js + spec.js
+- **反哺机制**：新坑必须打 step 标签，模板级问题同步改 template/
+
+### 清理
+- 删除 newton-cradle 的 docs/ scripts/ plastic.exr
+- 删除根目录旧 src/ dist/（投石机源码已在 cases/trebuchet/）
+- 删除 .DS_Store 和未引用图片
+
 ## [0.3.0] — Newton's cradle clean rebuild + shell standardization (2026-10-05)
 
 ### 牛顿摆 case 重建
