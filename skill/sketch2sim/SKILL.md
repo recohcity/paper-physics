@@ -157,10 +157,13 @@ or fix styling. Only pause for the three gates below.
 - **Agent does:** headless input sweeps.
 
 ### Step 8 — Interaction
-- **Read pitfalls:** [step8] #17, #19, #20, #21, #23, #27, #40, #41, #42.
-- **Agent does:** direct manipulation, slow-mo, replay.
+- **Read pitfalls:** [step8] #17, #19, #20, #21, #23, #27, #40, #41, #42, #45.
+- **Read references:** `references/panel-layout-standards.md` (build panel layout rules).
+- **Agent does:** direct manipulation, slow-mo, replay, build panel layout.
 - **GATE — interaction nodes:** list draggable meshes, follow chains, collision triggers,
-  play/replay auto-fires. **Wait for user confirmation.** Store in `cases/<slug>/docs/interaction-nodes.md`.
+  play/replay auto-fires, AND the build panel card map (which controls in which card,
+  card order, flex widths, button sizes). **Wait for user confirmation.** Store in
+  `cases/<slug>/docs/interaction-nodes.md`.
 
 ### Step 9 — PARTS Annotation
 - **Read pitfalls:** [step9] #30.

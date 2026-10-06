@@ -382,3 +382,22 @@ collider was actually created for them. The visual model exists, the physics bod
 - Visual-follow (rope, cable) → no collider needed, OK.
 If a dynamic object can cross a visual boundary, that boundary needs a collider
 OR an explicit clamp (e.g. pendulum angle limit). Verify headless, not by eye.
+
+## #45 [step8] Build panel layout: card-per-responsibility, flex not px
+
+Newton's cradle build panel was reworked 15+ times because layout was guessed
+instead of following a standard. Full spec in `references/panel-layout-standards.md`.
+Key rules:
+- Each functional group = its own `.panel-section.throw-section` card. Do NOT
+  stuff playback buttons into the material card. Three cards = three divs.
+- Card row: `display:flex; flex-direction:row; gap:6px; align-items:stretch;`
+- Each card: `flex:1;` (never fixed px width).
+- Inside card: `flex-direction:column; justify-content:center;` so all cards
+  are equal height.
+- Title font: `11px / #8a7e6e / letter-spacing:1px`.
+- Buttons: `padding:4px 8px; font-size:11px;` — same across all cards.
+- Primary: `.action-btn.btn-primary`. Secondary: `.action-btn`. Icon-only:
+  `.action-btn.icon-only`.
+- Legend row: `white-space:nowrap`, left-aligned with card title (no indent).
+- Before writing HTML, confirm the card map with the user: which controls go
+  in which card. Guessing = rework.
