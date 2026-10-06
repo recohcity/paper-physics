@@ -241,7 +241,7 @@ A demo stops at: it renders, it moves if you poke it. A delivered application sh
 - a Spec and a feasibility verdict,
 - and runs with `npm install && npm run dev`.
 
-## 8. Tour stage contract (8 steps, verbatim from paper-trebuchet)
+## 8. Tour stage contract (8 steps, verbatim from paper-physics)
 
 Every project's tour follows the same 8 stages. The shell drives them; the
 mechanism only provides the meshes/materials for each stage. Do NOT invent a
