@@ -782,6 +782,18 @@ class App {
 
     this.btnReset.addEventListener('click', () => {
       this.mechanism.reset();
+      // Reset panel controls to defaults
+      const sL = document.getElementById('slider-angle-l');
+      const sR = document.getElementById('slider-angle-r');
+      const link = document.getElementById('slider-link');
+      if (sL) { sL.value = 34; document.getElementById('val-angle-l').textContent = '34°'; }
+      if (sR) { sR.value = 34; document.getElementById('val-angle-r').textContent = '34°'; }
+      if (link) link.checked = true;
+      this._resetMaterialButtons();
+      for (let i = 0; i < 5; i++) {
+        this.mechanism.ballTypes[i] = 'steel';
+        this.mechanism.setBallMaterial(i, 'steel');
+      }
     });
 
     this.btnViewHero.addEventListener('click', () => this.setCameraView('Hero'));
