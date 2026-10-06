@@ -394,6 +394,13 @@
     // Two blueprint cards lying flat on the desk. sketch.jpg is 1568x1600
     // (~0.98:1 near-square), so the plane matches that aspect to avoid stretching.
     // ---------------------------------------------------------------------------
+    // Cream placeholder so cards don't flash black before textures load
+    const placeholderCanvas = document.createElement('canvas');
+    placeholderCanvas.width = 2; placeholderCanvas.height = 2;
+    const pctx = placeholderCanvas.getContext('2d');
+    pctx.fillStyle = '#f5f0e6'; pctx.fillRect(0,0,2,2);
+    const placeholderTex = new THREE.CanvasTexture(placeholderCanvas);
+
     const trebuchetTex = new THREE.TextureLoader().load('trebuchet.jpg', (t) => {
       t.colorSpace = THREE.SRGBColorSpace;
       t.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -454,11 +461,13 @@
       group.add(shadowMesh);
 
       const mat = new THREE.MeshStandardMaterial({
-        map: c.tex,
+        map: placeholderTex, // start with cream placeholder, swap when real texture loads
         roughness: 0.9,
         metalness: 0.0,
         side: THREE.DoubleSide,
       });
+      // Swap to real texture once loaded
+      c.tex.onLoad = () => { mat.map = c.tex; mat.needsUpdate = true; };
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), mat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.receiveShadow = true;
