@@ -1,6 +1,6 @@
 # paper-physics
 
-![banner](docs/assets/banner.png)
+![banner](assets/banner.png)
 
 手绘一张草图，几秒后变成一个可交互的 3D 物理 demo。
 
