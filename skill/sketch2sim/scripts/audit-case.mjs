@@ -72,11 +72,34 @@ if (exists(specJsRel)) {
   const srcFiles = fs.existsSync(p('src'))
     ? fs.readdirSync(p('src')).filter((f) => f.endsWith('.js') && f !== 'spec.js')
     : [];
-  const importers = srcFiles.filter((f) => /from\s+['"]\.\/spec(\.js)?['"]/.test(read(`src/${f}`)));
+  // An import statement alone proves nothing — the binding has to actually be dereferenced downstream,
+  // or it is dead code wearing a "this is wired to the Spec" costume. Extract the imported names from
+  // `import { A, B as C } from './spec.js'` / `import X from './spec.js'`, then require each one to be
+  // referenced (as `Name.` or bare `Name`) at least once outside its own import line.
+  const importers = [];
+  const importedButUnused = [];
+  for (const f of srcFiles) {
+    const content = read(`src/${f}`);
+    const importLineMatch = content.match(/import\s+(\{[^}]+\}|\w+)\s+from\s+['"]\.\/spec(\.js)?['"];?/);
+    if (!importLineMatch) continue;
+    importers.push(f);
+    const namesRaw = importLineMatch[1].replace(/[{}]/g, '');
+    const boundNames = namesRaw.split(',').map((s) => s.trim().split(/\s+as\s+/).pop()).filter(Boolean);
+    const bodyWithoutImportLine = content.replace(importLineMatch[0], '');
+    const unusedNames = boundNames.filter((name) => {
+      const usageRe = new RegExp(`\\b${name}\\b`);
+      return !usageRe.test(bodyWithoutImportLine);
+    });
+    if (unusedNames.length > 0) importedButUnused.push({ file: f, names: unusedNames });
+  }
   if (importers.length === 0) {
     fail(`src/spec.js exists but is not imported by any other src/*.js file — it is dead code, not a source of truth`);
+  } else if (importedButUnused.length > 0) {
+    for (const { file, names } of importedButUnused) {
+      fail(`src/${file} imports {${names.join(', ')}} from spec.js but never references ${names.length > 1 ? 'them' : 'it'} again — the import is decorative, physics values are likely hard-coded separately. Grep for the literal numbers from spec.json inside src/${file} to confirm.`);
+    }
   } else {
-    pass(`src/spec.js is imported by: ${importers.join(', ')}`);
+    pass(`src/spec.js is imported AND the imported binding is actually referenced in: ${importers.join(', ')}`);
   }
 } else {
   warn(`${specJsRel} not found (ok if this domain genuinely has no runtime-tunable spec, otherwise should exist)`);

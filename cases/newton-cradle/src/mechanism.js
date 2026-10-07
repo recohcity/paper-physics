@@ -7,10 +7,7 @@ import { SPEC } from './spec.js';
 
 // Physical constants for ball materials.
 // Ball radius calibrated at runtime; volume derived from ballR.
-const DENSITY = {
-  steel: 7850,    // kg/m³ — chrome steel
-  plastic: 1050,  // kg/m³ — ABS plastic
-};
+const DENSITY = SPEC.densities;
 
 /**
  * NewtonCradleModel — white clay model that morphs into real materials.
@@ -169,12 +166,12 @@ export class NewtonCradleModel {
 
   // ---- PHYSICS: analytic pendulum chain (ported from archive/newton-cradle-2) ----
   _initPhysics() {
-    this.L = 0.343;
-    this.g = 9.81;
-    this.ballR = 0.0247;
-    this.nBalls = 5;
-    this.airDrag = 0.01;
-    this.restitution = 0.97;
+    this.L = SPEC.pendulumLength;
+    this.g = SPEC.gravity;
+    this.ballR = SPEC.ballRadius;
+    this.nBalls = SPEC.ballCount;
+    this.airDrag = SPEC.airDrag;
+    this.restitution = SPEC.restitution;
     this.theta = new Array(this.nBalls).fill(0);
     this.omega = new Array(this.nBalls).fill(0);
     this.dragIndex = -1;
@@ -459,7 +456,7 @@ export class NewtonCradleModel {
     // Limit theta to ±90° (horizontal). Bounce velocity back.
     for (let i = 0; i < this.nBalls; i++) {
       if (this.dragIndices && this.dragIndices.has(i)) continue;
-      const limit = Math.PI / 2 - 0.02; // just below horizontal
+      const limit = SPEC.angleLimit; // just below horizontal
       if (this.theta[i] > limit) {
         this.theta[i] = limit;
         if (this.omega[i] > 0) this.omega[i] *= -this.restitution;

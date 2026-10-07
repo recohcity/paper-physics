@@ -1,7 +1,7 @@
 import * as CANNON from 'cannon-es';
 import * as THREE from 'three';
 import { sound } from './audio.js';
-import { MECH, UI } from './spec.js';
+import { MECH } from './spec.js';
 
 // ---------------------------------------------------------------------------
 // SCALE ANCHOR: 1 scene unit = 1 m (single source of truth; audit F3).

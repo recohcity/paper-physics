@@ -20,6 +20,6 @@
   "inputs": [
     { "key": "angleL", "label": "Left angle", "min": 5, "max": 60, "step": 1, "value": 34 },
     { "key": "angleR", "label": "Right angle", "min": 5, "max": 60, "step": 1, "value": 34 },
-    { "key": "ballCount", "label": "Balls", "min": 1, "max": 2, "step": 1, "value": 1 }
+    { "key": "ballsPerSide", "label": "Balls per side", "min": 1, "max": 2, "step": 1, "value": 1 }
   ]
 }

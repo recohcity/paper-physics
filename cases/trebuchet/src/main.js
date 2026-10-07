@@ -12,7 +12,7 @@ import {
   createBalsaTexture,
   createLeadTexture
 } from './textures.js';
-import { GEOM, UI } from './spec.js';
+import { UI } from './spec.js';
 import { PhysicsWorld } from './physics.js';
 import { TrebuchetModel } from './trebuchet.js';
 import { Environment } from './environment.js';
