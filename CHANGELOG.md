@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] — Build panel polish + SPEC runtime wiring + intake cross-check (2026-10-07)
+
+### Newton's cradle build panel
+- Three side-by-side cards: Bidirectional / Material / Playback, all `flex:1`
+- Material card: 123/45 per-ball buttons + Steel/Plastic legend (gray #c8ccd2 / amber #d4a017)
+- Playback card: Slow/Play row, Reset/🔊 row
+- Reset button restores sliders (34°), Sync checkbox, AND all balls back to steel material
+- `panel-layout-standards.md`: new skill reference — compact cards, flex width, card-map gate before writing HTML
+
+### SPEC actually drives runtime
+- mechanism.js no longer hardcodes physics values — reads from SPEC (pendulumLength, gravity, ballRadius, restitution, airDrag, angleLimit, densities)
+- audit-case.mjs upgraded: checks imported binding is actually referenced, not just that an import line exists
+- Rename `inputs[].ballCount` → `ballsPerSide` (was ambiguous with total ballCount)
+- Trebuchet: removed dead imports (GEOM from main.js, UI from physics.js)
+
+### Intake-to-spec cross-check
+- test/verify.mjs now parses `docs/intake-questions.md` and asserts SPEC values match confirmed answers
+- Newton cradle: ballCount=5, restitution=0.97 cross-checked
+- Trebuchet: leverRatio=4.0, CW range 1.4–10kg/4.8 default, 3 blocks × 0.14kg cross-checked
+
+### Trebuchet arm naming fix
+- Long arm (throwing/-X) = 0.596 m, short arm (CW/+X) = 0.17 m — consistent across spec.json, trebuchet.js, mesh-roster.md
+
+### Template backport
+- Cream loading overlay (anti black flash)
+- Reset also restores panel sliders
+- build-panel is flex-row container for cards
+- Removed old `skill/template/` (superseded by `skill/sketch2sim/template/`)
+
 ## [0.5.0] — Project rename + mechanical audit gate + docs backfill (2026-10-06)
 
 ### Rename
