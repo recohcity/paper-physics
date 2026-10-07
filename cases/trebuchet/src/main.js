@@ -495,13 +495,33 @@ class App {
 
   // Camera presets — auto-fit entire paper + all objects
   getFitDistance(neededWidth, neededHeight) {
-    const aspect = window.innerWidth / window.innerHeight;
+    const w = this.container.clientWidth || window.innerWidth;
+    // Subtract top bar (~60px) and bottom panel (~90px) — visible canvas area
+    const h = (this.container.clientHeight || window.innerHeight) - 150;
+    const aspect = w / h;
     const vFov = THREE.MathUtils.degToRad(this.camera.fov);
-    // visible height at distance d: 2*d*tan(vFov/2)
     const tanHalf = Math.tan(vFov / 2);
     const dForHeight = neededHeight / (2 * tanHalf);
     const dForWidth = neededWidth / (2 * tanHalf * aspect);
     return (Math.max(dForHeight, dForWidth) + 0.15) * this.zoomFactor;
+  }
+
+  // Auto-fit: compute the model's bounding box and return the distance needed
+  // to fit it (with margin) at the current viewport aspect.
+  autoFitDistance(viewName, margin = 1.6) {
+    // Union bounding box of trebuchet + blocks + ball (not desk/paper/lights)
+    const box = new THREE.Box3();
+    box.setFromObject(this.trebuchet.group);
+    if (this.blocksCutoutMesh) box.expandByObject(this.blocksCutoutMesh);
+    if (this.ballStand) box.expandByObject(this.ballStand);
+    if (box.isEmpty()) return this.getFitDistance(2.5, 1.5);
+    const size = box.getSize(new THREE.Vector3());
+    this._modelCenter = box.getCenter(new THREE.Vector3());
+    let w, h;
+    if (viewName === 'Top') { w = size.x; h = size.z; }
+    else if (viewName === 'Side') { w = size.x; h = size.y; }
+    else { w = Math.max(size.x, size.z); h = size.y; }
+    return this.getFitDistance(w * margin, h * margin);
   }
 
   setCameraView(viewName, duration = 1000) {
@@ -510,26 +530,18 @@ class App {
     this.isCameraTransitioning = duration > 0;
     [this.btnViewHero, this.btnViewSide, this.btnViewTop, this.btnView3D].forEach(btn => btn?.classList.remove('active'));
 
-    // Paper center: (0.12, 0, 0), size 2.7 x 1.85; objects up to y~0.55
-    const look = new THREE.Vector3(0.12, 0.12, 0);
+    const d = this.autoFitDistance(viewName);
+    const look = this._modelCenter || new THREE.Vector3(0.12, 0.12, 0);
     let targetPos;
 
     if (viewName === 'Hero') {
       this.btnViewHero?.classList.add('active');
-      // 3/4 angle: fit the WHOLE scene (trebuchet + block pyramid), paper
-      // diagonal ~2.9 wide projected; widened to 3.4 so the pyramid's far
-      // edge stays fully inside the frame.
-      const d = this.getFitDistance(3.4, 1.1);
-      targetPos = new THREE.Vector3(0.12 + d * 0.35, look.y + d * 0.55, look.z + d * 0.85);
+      targetPos = new THREE.Vector3(look.x + d * 0.35, look.y + d * 0.55, look.z + d * 0.85);
     } else if (viewName === 'Side') {
       this.btnViewSide?.classList.add('active');
-      // Side view: fit paper width (2.7) and object height (0.65); widened.
-      const d = this.getFitDistance(3.2, 0.85);
       targetPos = new THREE.Vector3(look.x, look.y + d * 0.15, look.z + d);
     } else if (viewName === 'Top') {
       this.btnViewTop?.classList.add('active');
-      // Top view: fit paper width (2.7) and depth (1.85); widened.
-      const d = this.getFitDistance(3.3, 2.2);
       targetPos = new THREE.Vector3(look.x, look.y + d, look.z + 0.01);
     } else if (viewName === '3D') {
       this._lastFixedView = this.currentView && this.currentView !== '3D' ? this.currentView : 'Hero';

@@ -79,3 +79,34 @@ The tour is purely visual — the user watches the model transform, no reading r
 - Lifecycle: appears at PHYSICS step, stays through PLAY/REPLAY, hides on BUILD.
 - On-demand: click title or "Physics Info" tag → show 5s.
 - Text must be selectable (`user-select: text`).
+
+## Camera auto-fit (Hero/Side/Top views)
+
+Never hardcode camera distances per case. Compute from the model's actual
+bounding box:
+
+```js
+autoFitDistance(viewName, margin = 1.6) {
+  // Union bbox of ALL visible scene objects (mechanism + props + blocks + stand)
+  const box = new THREE.Box3();
+  box.setFromObject(this.mechanism.group);
+  if (this.blocksMesh) box.expandByObject(this.blocksMesh);
+  if (this.standMesh) box.expandByObject(this.standMesh);
+  if (box.isEmpty()) return this.getFitDistance(1.6, 1.1);
+  const size = box.getSize(new THREE.Vector3());
+  let w, h;
+  if (viewName === 'Top')       { w = size.x; h = size.z; }
+  else if (viewName === 'Side') { w = size.x; h = size.y; }
+  else                          { w = Math.max(size.x, size.z); h = size.y; }
+  return this.getFitDistance(w * margin, h * margin);
+}
+```
+
+Key points:
+- **Include every scene object** — not just the main mechanism group.
+  Blocks, ball stand, props all must be in the union bbox, or they get cropped.
+- **Subtract UI chrome**: `getFitDistance` uses available canvas height minus
+  ~150px (top bar + bottom panel), not full window height.
+- **margin = 1.6**: breathing room, not edge-to-edge.
+- On window resize, re-call `setCameraView(currentView, 0)` to re-fit.
+- Empty-box fallback before model loads (visible=false) prevents errors.

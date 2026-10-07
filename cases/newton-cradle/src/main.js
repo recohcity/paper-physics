@@ -256,12 +256,25 @@ class App {
 
   // ----------------------------------------------------------------- camera
   getFitDistance(neededWidth, neededHeight) {
-    const aspect = window.innerWidth / window.innerHeight;
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = (this.container.clientHeight || window.innerHeight) - 150;
+    const aspect = w / h;
     const vFov = THREE.MathUtils.degToRad(this.camera.fov);
     const tanHalf = Math.tan(vFov / 2);
     const dForHeight = neededHeight / (2 * tanHalf);
     const dForWidth = neededWidth / (2 * tanHalf * aspect);
     return (Math.max(dForHeight, dForWidth) + 0.15) * this.zoomFactor;
+  }
+
+  autoFitDistance(viewName, margin = 1.25) {
+    const box = new THREE.Box3().setFromObject(this.mechanism.group);
+    if (box.isEmpty()) return this.getFitDistance(1.6, 1.1);
+    const size = box.getSize(new THREE.Vector3());
+    let w, h;
+    if (viewName === 'Top') { w = size.x; h = size.z; }
+    else if (viewName === 'Side') { w = size.x; h = size.y; }
+    else { w = Math.max(size.x, size.z); h = size.y; }
+    return this.getFitDistance(w * margin, h * margin);
   }
 
   setCameraView(viewName, duration = 1000) {
@@ -275,15 +288,15 @@ class App {
 
     if (viewName === 'Hero') {
       this.btnViewHero?.classList.add('active');
-      const d = this.getFitDistance(1.6, 1.1);
+      const d = this.autoFitDistance('Hero');
       targetPos = new THREE.Vector3(0.12 + d * 0.35, look.y + d * 0.6, look.z + d * 0.85);
     } else if (viewName === 'Side') {
       this.btnViewSide?.classList.add('active');
-      const d = this.getFitDistance(1.4, 1.05);
+      const d = this.autoFitDistance('Side');
       targetPos = new THREE.Vector3(look.x, look.y + d * 0.12, look.z + d);
     } else if (viewName === 'Top') {
       this.btnViewTop?.classList.add('active');
-      const d = this.getFitDistance(2.6, 2.0);
+      const d = this.autoFitDistance('Top');
       targetPos = new THREE.Vector3(look.x, look.y + d, look.z + 0.01);
     } else if (viewName === '3D') {
       this._lastFixedView = (this.currentView && this.currentView !== '3D') ? this.currentView : 'Hero';
