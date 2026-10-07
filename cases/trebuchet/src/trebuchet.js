@@ -108,12 +108,8 @@ export class TrebuchetModel {
     this.cwWorldPos = new THREE.Vector3();
 
     // Dimensions (scale anchor: 1 scene unit = 1 m)
-    this.LONG_ARM = GEOM.LONG_ARM; // long arm (throwing side, backwards/-X) — spec.js
-    // SHORT_ARM 0.20 -> 0.315 implements audit fix plan A (pin 0.185 -> 0.30):
-    // the counterweight hanger pin sits at SHORT_ARM - 0.015 = 0.30, making the
-    // 3.5:1 lever ratio workable with a light projectile. Verified by mech2d
-    // (3.588 m/s, 39.8°, land x = 0.870) and Cannon-es cross-check (V2).
-    this.SHORT_ARM = GEOM.SHORT_ARM; // short arm (counterweight side) — spec.js
+    this.LONG_ARM = GEOM.LONG_ARM; // long arm (throwing/cup side, -X direction, 0.596 m) — spec.js
+    this.SHORT_ARM = GEOM.SHORT_ARM; // short arm (counterweight side, +X direction, 0.17 m, 4:1 lever) — spec.js
     this.CW_HANG = GEOM.CW_HANG; // hanging link length — spec.js
 
     // Pivot height at apex of A-frame

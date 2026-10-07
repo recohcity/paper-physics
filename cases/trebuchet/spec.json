@@ -4,8 +4,8 @@
   "world": { "gravity": 9.82 },
   "physics": {
     "leverRatio": 4.0,
-    "armLongX": 0.315,
-    "armShortX": -0.596,
+    "armLongX": -0.596,
+    "armShortX": 0.17,
     "restAngle": -1.0,
     "counterweightKg": { "min": 1.4, "max": 10.0, "default": 4.8 },
     "ballKg": { "min": 0.05, "max": 0.30, "default": 0.10 },

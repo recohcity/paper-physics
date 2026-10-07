@@ -177,10 +177,13 @@ or fix styling. Only pause for the three gates below.
 ### Step 11 — Lobby Integration & Delivery
 - **Read pitfalls:** [step11] #35, #39, #40.
 - **Agent does:** screenshot sketch, add lobby card, build all cases, write README.
-- **GATE — mechanical audit:** run
+- **GATE — mechanical audit (hard):** run
   `node skill/sketch2sim/scripts/audit-case.mjs cases/<slug>`
-  **MUST exit 0** before handoff. This checks spec.json, spec.js wiring,
-  docs/ six artifacts, test/verify.mjs — no reliance on memory.
+  **exit code MUST be 0** before handoff. If exit 1, fix the FAIL items — do
+  not mark the case done. This checks spec.json, spec.js wiring (imported AND
+  actually referenced), docs/ six artifacts, test/verify.mjs runs and passes.
+  Items checked by the script are listed in `references/case-onboarding.md`
+  under `[script]`; do not maintain a parallel manual checklist for them.
 - **GATE — final acceptance:** present the running build. Wait for user to accept or list fixes.
 
 ### Audit mode

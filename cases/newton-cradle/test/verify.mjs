@@ -1,9 +1,26 @@
 // Headless self-check for Newton's cradle.
-// Verifies physics constants and collision math are consistent.
+// Verifies physics constants and collision math are consistent,
+// AND that SPEC values match what was confirmed in intake-questions.md.
 import assert from 'node:assert';
+import fs from 'node:fs';
 import { SPEC } from '../src/spec.js';
 
 console.log('verify: Newton cradle self-check');
+
+// 0. Cross-check: SPEC values must match docs/intake-questions.md
+const intake = fs.readFileSync(new URL('../docs/intake-questions.md', import.meta.url), 'utf8');
+
+// Q1: "How many balls? | 5, classic"
+const ballCountM = intake.match(/How many balls\?\s*\|\s*(\d+)/);
+assert.ok(ballCountM, 'intake-questions.md: Q1 (how many balls) not found');
+assert.strictEqual(SPEC.ballCount, parseInt(ballCountM[1], 10),
+  `SPEC.ballCount=${SPEC.ballCount} but intake Q1 says "${ballCountM[1]}"`);
+
+// Q5: "Restitution? | 0.97 (nearly elastic)"
+const restM = intake.match(/Restitution\?\s*\|\s*([\d.]+)/);
+assert.ok(restM, 'intake-questions.md: Q5 (restitution) not found');
+assert.strictEqual(SPEC.restitution, parseFloat(restM[1]),
+  `SPEC.restitution=${SPEC.restitution} but intake Q5 says "${restM[1]}"`);
 
 // 1. Pendulum length and gravity are sane
 assert.ok(SPEC.pendulumLength > 0.3 && SPEC.pendulumLength < 0.5,
