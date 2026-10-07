@@ -69,6 +69,22 @@ The agent drives autonomously after intake. The user pauses at three confirmatio
 6. **Never fake mechanics with guard code.** If physics says it tilts wrong, let it tilt.
 7. **Three object roles:** dynamic actor, static world prop (solid but immobile), visual-follow.
 8. **Every object has physics from day one.** No "visual only by accident".
+
+## Mechanical verification (no memory required)
+
+The workflow's promises are enforced by scripts, not by the agent remembering:
+
+- **`scripts/audit-case.mjs <slug>`** — run before declaring a case done.
+  Checks spec.json exists, spec.js is imported **and actually referenced** (not
+  dead code), docs/ six artifacts are non-trivial, test/verify.mjs runs and
+  exits 0. Exit 1 = do not ship.
+- **`test/verify.mjs`** — headless assertions. Beyond internal consistency
+  (gravity sane, ratios positive), it parses `docs/intake-questions.md` and
+  asserts SPEC values match the answers the user confirmed. This catches
+  "the code says 5 but the user agreed to 4" drift.
+- **Card map gate** — before writing build-panel HTML, list which controls go
+  in which card, save to `docs/interaction-nodes.md`. See
+  `references/panel-layout-standards.md`.
 9. **Tour ⇄ Build switching resets all state** — physics, materials, sliders, camera.
 10. **Compact panel:** max 2 rows per card, 90px sliders, no data readout cards.
 11. **Physics card:** equations written for user-adjustable parameters, not academic notation.
