@@ -88,6 +88,7 @@ The workflow's promises are enforced by scripts, not by the agent remembering:
 9. **Tour ⇄ Build switching resets all state** — physics, materials, sliders, camera.
 10. **Compact panel:** max 2 rows per card, 90px sliders, no data readout cards.
 11. **Physics card:** equations written for user-adjustable parameters, not academic notation.
+12. **Camera auto-fit:** Hero/Side/Top distances computed from union bounding box of all scene objects (not hardcoded). See `references/visual-standards.md`.
 
 ## Repository layout
 
