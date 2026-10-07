@@ -224,7 +224,7 @@ Run with `node test/verify.mjs`. A project is not delivered until this passes.
 
 After step 2 (Spec + ambiguity confirmation), before any mechanism code:
 
-- **Scaffold.** Copy `skill/template/` into `cases/<slug>/`, rename, save the sketch to `public/`.
+- **Scaffold.** Copy `skill/sketch2sim/template/` into `cases/<slug>/`, rename, save the sketch to `public/`.
 - **Generate `src/spec.js`** from `spec.json` (single source of truth).
 - **Write `src/mechanism.js`** for this device.
 - **Fill the panel** from Spec inputs/outputs.
@@ -363,7 +363,7 @@ matte-white placeholder so the user reads "this is the shape, materials come nex
 Trigger: user uploads a sketch image + @sketch2sim.
 
 1. **Intake** — save sketch to `public/sketch.jpg`, extract mechanism name/scale.
-2. **Scaffold** — `skill/template/` copied to `cases/<name>/`, npm install, dev server on 5174+.
+2. **Scaffold** — `skill/sketch2sim/template/` copied to `cases/<name>/`, npm install, dev server on 5174+.
    Shell = full tour frame (wood desk, cream paper, pencil, blue-white eraser, bottom panel, hero/side/top/3D views, zoom, REWIND/PLAY/FF).
 3. **Tour stages** (button names generalized):
    - **SKETCH** (was READ): sketch scaled ~30%, placed centered on A4 paper. Position MUST pre-plan the later cutout bottom line and 3D model footprint — these align at delivery.
