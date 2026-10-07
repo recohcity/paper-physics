@@ -7,6 +7,9 @@
 <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
+<!-- Cream loading overlay — prevents black flash on load -->
+<div id="loading-overlay" style="position:fixed;inset:0;background:#f5f0e6;z-index:9999;display:flex;align-items:center;justify-content:center;transition:opacity 0.3s;"></div>
+
 <div id="canvas-container"></div>
 
 <div id="bottom-bar">
@@ -25,14 +28,8 @@
     </div>
   </div>
 
-  <div id="build-panel" class="build-panel hidden">
-    <div id="param-section" class="panel-section"></div>
-    <div class="panel-section">
-      <button id="btn-action" class="action-btn primary">Action</button>
-      <button id="btn-reset" class="action-btn">Reset</button>
-      <button id="btn-slowmo" class="pill">Slow-mo</button>
-    </div>
-  </div>
+  <!-- Build panel: cards go here, see references/panel-layout-standards.md -->
+  <div id="build-panel" class="build-panel hidden" style="display:flex;flex-direction:row;gap:6px;align-items:stretch;"></div>
 </div>
 
 <script type="module" src="./src/main.js"></script>

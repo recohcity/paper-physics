@@ -74,6 +74,7 @@ spec.inputs.forEach(inp => {
   row.innerHTML = `<div class="ctrl-label-row"><label>${inp.label}</label><span>${inp.value}</span></div>`;
   const sl = document.createElement('input');
   sl.type = 'range'; sl.min = inp.min; sl.max = inp.max; sl.step = inp.step; sl.value = inp.value;
+  sl.dataset.key = inp.key;
   sl.oninput = () => { row.querySelector('span').textContent = sl.value; mech.setParam(inp.key, parseFloat(sl.value)); };
   row.appendChild(sl);
   paramSection.appendChild(row);
@@ -92,7 +93,14 @@ document.getElementById('btn-build').onclick = () => setMode('build');
 
 // ---- buttons ----
 document.getElementById('btn-action').onclick = () => mech.action();
-document.getElementById('btn-reset').onclick = () => { mech.reset(); };
+document.getElementById('btn-reset').onclick = () => {
+  mech.reset();
+  // Reset panel sliders to defaults (case-specific: add your own resets here)
+  paramSection.querySelectorAll('input[type=range]').forEach(sl => {
+    const inp = spec.inputs.find(i => i.key === sl.dataset.key);
+    if (inp) { sl.value = inp.value; sl.dispatchEvent(new Event('input')); }
+  });
+};
 let slowmo = false;
 document.getElementById('btn-slowmo').onclick = (e) => {
   slowmo = !slowmo; e.target.classList.toggle('active', slowmo);
@@ -118,3 +126,11 @@ function tick(now) {
 }
 setMode('tour');
 requestAnimationFrame(tick);
+
+// Fade out cream loading overlay after first render
+requestAnimationFrame(() => {
+  setTimeout(() => {
+    const ov = document.getElementById('loading-overlay');
+    if (ov) { ov.style.opacity = '0'; setTimeout(() => ov.remove(), 300); }
+  }, 200);
+});
