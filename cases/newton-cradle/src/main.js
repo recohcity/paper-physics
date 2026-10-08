@@ -266,9 +266,13 @@ class App {
     return (Math.max(dForHeight, dForWidth) + 0.15) * this.zoomFactor;
   }
 
-  autoFitDistance(viewName, margin = 1.25) {
+  autoFitDistance(viewName, margin = 1.6) {
     const box = new THREE.Box3().setFromObject(this.mechanism.group);
-    if (box.isEmpty()) return this.getFitDistance(1.6, 1.1);
+    if (box.isEmpty()) {
+      // No model yet (SKETCH/LIFT): fit the paper with desk visible
+      return this.getFitDistance(2.5, 1.5);
+    }
+    // Model visible: fit the model itself
     const size = box.getSize(new THREE.Vector3());
     let w, h;
     if (viewName === 'Top') { w = size.x; h = size.z; }

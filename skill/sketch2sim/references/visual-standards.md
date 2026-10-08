@@ -82,8 +82,12 @@ The tour is purely visual — the user watches the model transform, no reading r
 
 ## Camera auto-fit (Hero/Side/Top views)
 
-Never hardcode camera distances per case. Compute from the model's actual
-bounding box:
+Never hardcode camera distances per case. Two fit modes:
+
+- **SKETCH/LIFT (no model yet):** fit the paper area with desk visible.
+  Fallback: `getFitDistance(2.5, 1.5)`.
+- **MODEL/MATERIAL/PLAY/REPLAY/BUILD:** fit the model's union bounding box
+  (mechanism + props + blocks + stand). Not the paper — model fills the frame.
 
 ```js
 autoFitDistance(viewName, margin = 1.6) {
@@ -92,7 +96,7 @@ autoFitDistance(viewName, margin = 1.6) {
   box.setFromObject(this.mechanism.group);
   if (this.blocksMesh) box.expandByObject(this.blocksMesh);
   if (this.standMesh) box.expandByObject(this.standMesh);
-  if (box.isEmpty()) return this.getFitDistance(1.6, 1.1);
+  if (box.isEmpty()) return this.getFitDistance(2.5, 1.5); // SKETCH: paper + desk
   const size = box.getSize(new THREE.Vector3());
   let w, h;
   if (viewName === 'Top')       { w = size.x; h = size.z; }
@@ -109,4 +113,4 @@ Key points:
   ~150px (top bar + bottom panel), not full window height.
 - **margin = 1.6**: breathing room, not edge-to-edge.
 - On window resize, re-call `setCameraView(currentView, 0)` to re-fit.
-- Empty-box fallback before model loads (visible=false) prevents errors.
+- Empty-box fallback = paper view (2.5×1.5), prevents errors.
