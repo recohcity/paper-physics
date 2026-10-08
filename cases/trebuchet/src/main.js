@@ -1534,7 +1534,7 @@ class App {
         this.environment.hidePaperSketch();
         if (this.environment.pencilGroup) this.environment.pencilGroup.visible = false;
         if (this.environment.eraserGroup) this.environment.eraserGroup.visible = false;
-        this.showTourBanner('2/8 Blueprint outline highlights, then lifts off as 2D cutouts');
+        this.showTourBanner('2/8 SKETCH outline highlights, then lifts off as 2D cutouts');
         this.updateScrubber(0.19, '00:16');
         if (this.trebuchet.ropeMesh) this.trebuchet.ropeMesh.visible = false;
         if (this.ballStand) this.ballStand.visible = false;
