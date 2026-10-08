@@ -952,3 +952,8 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 8px 24px rgba(0,0,0,0.15);
   font-size: 13px; color: #3a2a1a; line-height: 1.5;
 }
+
+/* === Global button micro-interactions === */
+button { transition: all 0.15s ease; }
+button:hover { transform: translateY(-1px); }
+button:active { transform: translateY(1px); }
