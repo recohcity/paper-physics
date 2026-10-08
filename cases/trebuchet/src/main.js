@@ -1114,7 +1114,7 @@ class App {
     this.annotations.clear();
     this.updateScrubber(0, '00:00');
     this.updateNavButtons('tour');
-    this.showTourBanner('Pencil Blueprint: Hand-drawn trebuchet sketch on engineer paper. Click Play to start the tour.');
+    this.showTourBanner('SKETCH — hand-drawn trebuchet on engineering paper. Click Play to start the tour.');
 
     // 4. Default camera view: looking down at the hand-drawn sketch
     this.setCameraView('Top', 0);
@@ -1389,10 +1389,10 @@ class App {
   updateMorphStage(v) {
     const el = document.getElementById('morph-stage');
     if (!el) return;
-    let name = 'READ';
+    let name = 'SKETCH';
     if (v > 16 && v <= 49) name = 'LIFT';
     else if (v > 49 && v <= 83) name = 'MODEL';
-    else if (v > 83) name = 'WOOD';
+    else if (v > 83) name = 'MATERIAL';
     el.textContent = name;
   }
 
@@ -1521,7 +1521,7 @@ class App {
         if (this.ballStand) this.ballStand.visible = false;
 
         this.setCameraView('Top', 800);
-        this.showTourBanner('1/8 Blueprint — hand-drawn trebuchet sketch (rope + ball stand) on engineering paper');
+        this.showTourBanner('1/8 SKETCH — hand-drawn trebuchet sketch (rope + ball stand) on engineering paper');
         this.updateScrubber(0.06, '00:05');
         this.highlightTourStep(0);
         await sleep(1400);
@@ -1626,7 +1626,7 @@ class App {
       // Step 4: 白模型 -> 正式的材质3D模型
       // -----------------------------------------------------------------
       if (startStep <= 3 && (singleStep === null || singleStep === 3)) {
-        this.showTourBanner('4/8 White model takes on balsa wood, metal pins & lead counterweight');
+        this.showTourBanner('4/8 MATERIAL — white model takes on balsa wood, metal pins & lead counterweight');
         this.updateScrubber(0.53, '00:45');
         this.highlightTourStep(3);
         this.setCameraView('Hero', 1800);

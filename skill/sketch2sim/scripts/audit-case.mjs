@@ -159,6 +159,21 @@ if (exists(mechRel) && hasSpecJson) {
   }
 }
 
+// --- 5. Tour stage naming must use SKETCH/LIFT/MODEL/MATERIAL (not legacy READ/WOOD) ----
+console.log('\n-- Tour stage naming --');
+for (const f of ['src/main.js', 'index.html']) {
+  if (!exists(f)) continue;
+  const content = read(f);
+  const legacy = [];
+  if (/\b'READ'\b/.test(content) || /\b"READ"\b/.test(content)) legacy.push('READ');
+  if (/\b'WOOD'\b/.test(content) || /\b"WOOD"\b/.test(content)) legacy.push('WOOD');
+  if (legacy.length > 0) {
+    fail(`${f} still uses legacy tour stage name(s): ${legacy.join(', ')} — must be SKETCH/MATERIAL per visual-standards.md`);
+  } else {
+    pass(`${f} uses standardized tour stage names`);
+  }
+}
+
 // --- Summary ---------------------------------------------------------------------------------------
 console.log(`\n=== ${failures === 0 ? 'PASS' : 'FAIL'}: ${failures} failure(s), ${warnings} warning(s) ===\n`);
 process.exit(failures === 0 ? 0 : 1);
