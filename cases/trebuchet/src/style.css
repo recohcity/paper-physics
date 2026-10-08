@@ -645,6 +645,15 @@ input[type="range"]::-webkit-slider-thumb {
   background: #e2dacb;
 }
 
+.reset-btn {
+  background: #c9b896;
+  color: #2d261e;
+  font-weight: 600;
+}
+.reset-btn:hover {
+  background: #b8a67f;
+}
+
 .action-btn.icon-only {
   display: inline-flex;
   align-items: center;
