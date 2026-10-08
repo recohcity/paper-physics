@@ -126,6 +126,8 @@ or fix styling. Only pause for the three gates below.
 ### Step 1 — Recognition
 - **Read pitfalls:** [step1] #9, #10.
 - **Agent does:** read sketch part-by-part, output parts/joints/actuators JSON.
+- Run `scripts/normalize-sketch.py archive/original_<slug>.png public/` to produce
+  `cutout.png` (tight rectangle label) and `sketch.jpg` (label on cream A4).
 - No user pause.
 
 ### Step 2 — Spec

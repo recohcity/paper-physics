@@ -168,18 +168,32 @@
           </span>
         </div>
       </div>
-      <!-- Card 3: Playback -->
-      <div class="panel-section throw-section" style="padding:8px 12px;flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;">
-        <div style="display:flex;gap:4px;">
-          <button id="btn-toggle-slowmo" class="action-btn btn-primary" style="padding:4px 8px;font-size:11px;flex:1;">Slow</button>
-          <button id="btn-bidir-play" class="action-btn btn-primary" style="padding:4px 8px;font-size:11px;flex:1;">Play</button>
+      <!-- Card 3: sketch2sim -->
+      <div class="panel-section throw-section" style="padding:8px 12px;flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:4px;">
+        <div class="ctrl-group">
+          <div class="ctrl-label-row">
+            <label>sketch2sim</label>
+            <span class="value-badge" id="morph-stage">MATERIAL</span>
+          </div>
+          <input type="range" id="morph-slider" min="0" max="100" value="100" step="1">
+          <div class="morph-scale">
+            <span class="morph-tick t0"></span>
+            <span class="morph-tick t33"></span>
+            <span class="morph-tick t66"></span>
+            <span class="morph-tick t100"></span>
+          </div>
         </div>
-        <div style="display:flex;gap:4px;">
-          <button id="btn-reset" class="action-btn" style="padding:4px 8px;font-size:11px;flex:1;">Reset</button>
-          <button id="panel-sound-btn" class="action-btn icon-only" title="Toggle Sound" style="padding:4px 6px;">
+        <div class="panel-footer">
+          <button id="btn-reset" class="action-btn">Reset</button>
+          <button id="panel-sound-btn" class="action-btn icon-only" title="Toggle Sound">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
           </button>
         </div>
+      </div>
+      <!-- Card 4: Playback -->
+      <div class="panel-section throw-section" style="padding:8px 12px;flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:4px;">
+        <button id="btn-toggle-slowmo" class="action-btn btn-primary" style="padding:6px 8px;font-size:11px;">Slow</button>
+        <button id="btn-bidir-play" class="action-btn btn-primary" style="padding:6px 8px;font-size:11px;">Play</button>
       </div>
       </div>
   </div>

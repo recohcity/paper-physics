@@ -114,3 +114,22 @@ Key points:
 - **margin = 1.6**: breathing room, not edge-to-edge.
 - On window resize, re-call `setCameraView(currentView, 0)` to re-fit.
 - Empty-box fallback = paper view (2.5×1.5), prevents errors.
+
+## Sketch normalization (user hand-drawn → standard assets)
+
+User provides one raw sketch photo. Process it into two assets:
+
+1. **`public/cutout_<slug>.png`** — tight rectangle crop of the sketch content
+   (find non-white bbox, add small padding, crop). Keep original image as-is,
+   no color processing, no transparency, no filling. Treat as a paper label.
+2. **`public/sketch_<slug>.jpg`** — the label pasted onto a clean cream A4
+   paper (2.7m × 1.85m world). Centered, with margin for pencil + eraser.
+
+**Hard sizing rule:**
+- Label height on paper = model's total bounding-box height (measured after
+  model loads). Default estimate until model exists.
+- Cutout plane (LIFT step) uses the same PNG at the same height.
+- Both centered at world X=0.12, Z=0.
+
+This guarantees: SKETCH label → LIFT standing label → MODEL white 3D all
+line up in size and position. No size jump between stages.

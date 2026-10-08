@@ -68,6 +68,7 @@ class App {
     this.btnView3D = document.getElementById('btn-view-3d');
     this.btnReset = document.getElementById('btn-reset');
     this.soundBtn = document.getElementById('panel-sound-btn');
+    this.morphSlider = document.getElementById('morph-slider');
     this.scrubberMute = document.getElementById('scrubber-mute');
     this.playerScrubber = document.getElementById('player-scrubber');
     this.scrubberPlay = document.getElementById('scrubber-play');
@@ -221,7 +222,7 @@ class App {
 
       const img = texture.image;
       const aspect = img.width / img.height;       // w / h
-      const standH = 0.35;                           // match cradle 3D height
+      const standH = 0.37;                           // = 3D model total height (L + ballR + beam)
       const standW = standH * aspect;
 
       const geom = new THREE.PlaneGeometry(standW, standH);
@@ -267,13 +268,15 @@ class App {
   }
 
   autoFitDistance(viewName, margin = 1.6) {
-    const box = new THREE.Box3().setFromObject(this.mechanism.group);
-    if (box.isEmpty()) {
-      // No model yet (SKETCH/LIFT): fit the paper with desk visible
-      return this.getFitDistance(2.5, 1.5);
+    const modelVisible = this.mechanism.group.visible && this.mechanism.group.children.length > 0;
+    if (!modelVisible) return this.getFitDistance(3.4, 2.4);
+    // Cache the model bbox once (first time model appears) — don't recompute each step
+    if (!this._modelBBox) {
+      const box = new THREE.Box3().setFromObject(this.mechanism.group);
+      if (!box.isEmpty()) this._modelBBox = box;
+      else return this.getFitDistance(3.4, 2.4);
     }
-    // Model visible: fit the model itself
-    const size = box.getSize(new THREE.Vector3());
+    const size = this._modelBBox.getSize(new THREE.Vector3());
     let w, h;
     if (viewName === 'Top') { w = size.x; h = size.z; }
     else if (viewName === 'Side') { w = size.x; h = size.y; }
@@ -383,6 +386,7 @@ class App {
   resetToFirstFrame() {
     if (this.tourAbortController) { this.tourAbortController.abort(); this.tourAbortController = null; }
     this.isTourRunning = true;
+    this._modelBBox = null;
     this.setPlayButtonState(false);
     this.setSlowMo(false);
 
@@ -500,6 +504,67 @@ class App {
       this.setCameraView('Hero', 0);
     }
     this.physicsCard.style.opacity = (i === 4) ? '1' : '0';
+
+    // Update sketch2sim badge + slider
+    const badge = document.getElementById('morph-stage');
+    if (badge) {
+      const names = ['SKETCH','LIFT','MODEL','MATERIAL','PHYSICS','PLAY','REPLAY','BUILD'];
+      badge.textContent = names[i] || '';
+    }
+    if (this.morphSlider) this.morphSlider.value = Math.round((i / 7) * 100);
+  }
+
+  // Continuous morph: v = 0..100 (0=SKETCH, 33=LIFT, 66=MODEL, 100=MATERIAL)
+  // Does NOT change camera view — only morphs the visual state.
+  applyMorphToStage(v) {
+    const m = this.mechanism;
+    if (v <= 0) {
+      this.environment.showPaperSketch();
+      if (m) m.group.visible = false;
+      if (this.cutoutMesh) this.cutoutMesh.visible = false;
+      return;
+    }
+    if (v <= 33) {
+      this.environment.hidePaperSketch();
+      const k = v / 33;
+      if (m) m.group.visible = false;
+      if (this.cutoutMesh) {
+        this.cutoutMesh.visible = true;
+        this.cutoutMesh.rotation.x = -Math.PI / 2 + k * (Math.PI / 2);
+        this.cutoutMesh.material.opacity = 1;
+      }
+      return;
+    }
+    if (v <= 66) {
+      const k = (v - 33) / 33;
+      this.environment.hidePaperSketch();
+      if (this.cutoutMesh) {
+        this.cutoutMesh.material.opacity = 1 - k;
+        if (k >= 1) this.cutoutMesh.visible = false;
+      }
+      if (m) {
+        m.group.visible = true;
+        m.setMaterialMorph(0);
+      }
+      return;
+    }
+    const k = (v - 66) / 34;
+    this.environment.hidePaperSketch();
+    if (this.cutoutMesh) this.cutoutMesh.visible = false;
+    if (m) {
+      m.group.visible = true;
+      m.setMaterialMorph(k);
+    }
+  }
+
+  updateMorphStage(v) {
+    const el = document.getElementById('morph-stage');
+    if (!el) return;
+    let name = 'SKETCH';
+    if (v > 16 && v <= 49) name = 'LIFT';
+    else if (v > 49 && v <= 83) name = 'MODEL';
+    else if (v > 83) name = 'MATERIAL';
+    el.textContent = name;
   }
 
   showPhysicsCard(ms = 2500) {
@@ -830,6 +895,24 @@ class App {
       const muted = sound.toggleMute();
       this.soundBtn.style.opacity = muted ? '0.4' : '1';
     });
+
+    // sketch2sim slider: continuous morph 0..100
+    if (this.morphSlider) {
+      this.morphSlider.addEventListener('input', (e) => {
+        const v = parseInt(e.target.value);
+        this.applyMorphToStage(v);
+        this.updateMorphStage(v);
+      });
+      this.morphSlider.addEventListener('change', () => {
+        const snaps = [0, 33, 66, 100];
+        const v = parseInt(this.morphSlider.value);
+        let best = snaps[0];
+        for (const s of snaps) if (Math.abs(v - s) < Math.abs(v - best)) best = s;
+        this.morphSlider.value = best;
+        this.applyMorphToStage(best);
+        this.updateMorphStage(best);
+      });
+    }
     this.scrubberMute.addEventListener('click', () => {
       const muted = sound.toggleMute();
       this.scrubberMute.style.opacity = muted ? '0.4' : '1';

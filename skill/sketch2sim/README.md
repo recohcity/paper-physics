@@ -131,6 +131,9 @@ All cases share the same look — copy verbatim:
 - **Background:** `#2e251d` (dark walnut).
 - **Tour banner:** no text — purely visual transition.
 - **Panel:** compact cards, English labels, `btn-primary` for action, `btn-secondary` for Reset.
+- **Sketch normalization:** raw photo → `scripts/normalize-sketch.py` → tight rectangle label
+  (`cutout.png`) on cream A4 (`sketch.jpg`). Label height = model height. No color filling,
+  no transparency — universal for any sketch type.
 
 ## Pitfalls
 

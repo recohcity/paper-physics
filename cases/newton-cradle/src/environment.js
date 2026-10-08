@@ -30,6 +30,7 @@ export class Environment {
     // 2. White Paper Sheet — thin box with visible edge, casts real shadow
     const paperT = 0.006;
     this.paperSketchTexture = paperTexture;
+    this.paperSketchTexture.colorSpace = THREE.SRGBColorSpace;
     this.paperCleanTexture = paperCleanTexture || paperTexture;
     this._paperSketchVisible = true;
 
