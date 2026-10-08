@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] — Sketch normalization + standardized build panel template (2026-10-07)
+
+### Sketch normalization workflow
+- `scripts/normalize-sketch.py`: raw photo → tight rectangle label (cutout.png) on cream A4 (sketch.jpg)
+- No color filling, no transparency — universal for any sketch type
+- Label height = model bbox height (auto-calibrated after model built)
+- Documented in `visual-standards.md` and Step 1 of SKILL.md
+
+### Build panel template — mandatory cards
+- **View card**: Hero/Side/Top/3D buttons + zoom slider
+- **sketch2sim card**: morph slider (0/33/66/100 = SKETCH/LIFT/MODEL/MATERIAL) + Reset + sound
+- **Playback card**: Slow / Play buttons
+- All pre-built into `template/index.html`
+- `panel-layout-standards.md` updated: card-per-responsibility, 2-row max
+
+### Camera auto-fit two modes
+- SKETCH/LIFT: fit paper + desk (fallback 2.5×1.5)
+- MODEL+: fit model bbox (margin 1.6), cached on first appearance
+- No more hardcoded camera distances
+
+### Tour stage naming unified
+- READ → SKETCH, WOOD → MATERIAL across both cases
+- audit-case.mjs now FAILS if legacy names found in code
+
+### Newton's cradle sketch2sim slider
+- Continuous morph transition (paper → cutout → white model → materials)
+- Does not change camera view — only visual state
+- Snaps to 0/33/66/100 on release
+
+### Root README rewritten in English
+
 ## [0.6.0] — Build panel polish + SPEC runtime wiring + intake cross-check (2026-10-07)
 
 ### Newton's cradle build panel

@@ -2,31 +2,30 @@
 
 ![banner](assets/banner.png)
 
-手绘一张草图，生成一个可交互的 3D 物理模型。
+Turn a hand-drawn sketch into an interactive 3D physics model.
 
-## 已完成案例
+## Cases
 
-| 案例 | 物理特性 |
+| Case | Physics |
 |---|---|
-| **投石机** | 4:1 杠杆配重驱动，cannon-es 刚体物理，参数化配重/球重/拉角，积木击倒 |
-| **牛顿摆** | V 绳双摆约束，质量加权弹性碰撞，钢/塑材质切换（密度表），双向对撞实验 |
+| **Trebuchet** | 4:1 lever counterweight drive, cannon-es rigid body, adjustable CW/ball weight/release angle, block pyramid knockdown |
+| **Newton's Cradle** | V-string double-pendulum constraint, mass-weighted elastic collisions, steel/plastic material switch (density table), bidirectional collision experiments |
 
-## 工作流
+## Workflow
 
-提交图纸 → 回答 3 个确认门（需求/Mesh清单/交互节点）→ 自动构建 → 验收。
-全程无需用户写代码或测试。
+Submit a sketch → answer 3 confirmation gates (requirements / mesh roster / interaction nodes) → auto-build → review. No code or testing required from the user.
 
-## 核心原则
+## Core principles
 
-- **Spec 是契约**：草图、3D、物理都从同一份规格生成
-- **物理来自刚体，不是手写公式**：改臂长，结果跟着变
-- **可行性先于 UI**：跑不通的设计几分钟就毙掉
-- **声明什么没建模**：刚体不覆盖强度/疲劳/流体，如实说明
-- **灯光/桌面/面板标准化**：所有案例共用同一套视觉基线
+- **Spec is the contract**: sketch, 3D, and physics all derive from one spec
+- **Physics from rigid bodies, not hardcoded formulas**: change a dimension, results follow
+- **Feasibility before UI**: unworkable designs get killed in minutes
+- **Declare what is not modeled**: rigid bodies don't cover strength/fatigue/fluids — state it honestly
+- **Standardized lighting/desk/panel**: all cases share one visual baseline
 
-## 本地运行
+## Run locally
 
-### 预览构建版（日常看效果）
+### Preview built version
 
 ```bash
 git clone https://github.com/recohcity/paper-physics.git
@@ -34,26 +33,26 @@ cd paper-physics
 npx vite
 ```
 
-打开 http://localhost:5175/ 进入大厅，点击图纸进入各案例。
+Open http://localhost:5175/ to enter the lobby, click a drawing to enter a case.
 
-### 开发模式（改代码热更新）
+### Dev mode (hot reload)
 
 ```bash
 ./dev.sh
 ```
 
-启动三个 dev server：投石机 5173、牛顿摆 5174、大厅 5175。
-大厅会自动跳转到对应的 dev server，支持热更新。
+Starts three dev servers: trebuchet 5173, newton-cradle 5174, lobby 5175.
 
-## 项目结构
+## Project structure
 
 ```
 cases/
-├── lobby/          # 大厅入口（可拖拽图纸卡片进入各案例）
-├── trebuchet/      # 投石机
-└── newton-cradle/  # 牛顿摆
+├── lobby/          # Lobby entry (draggable drawing cards)
+├── trebuchet/      # Trebuchet
+└── newton-cradle/  # Newton's Cradle
 skill/
-└── sketch2sim/     # 可复用模板 + 规范（12步工作流、44条pitfalls、视觉标准、门禁脚本）
+└── sketch2sim/     # Reusable template + standards (12-step workflow,
+                    # pitfalls, visual standards, audit gate script)
 ```
 
 ## License
