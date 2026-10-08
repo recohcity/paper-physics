@@ -232,6 +232,9 @@ body {
   background: #100d0a;
   transform: translateY(-1px);
 }
+.btn-primary:active {
+  transform: translateY(1px);
+}
 
 .btn-secondary {
   background: #fdfaf4;
@@ -619,6 +622,13 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
+  transition: all 0.15s;
+}
+.view-btn:hover {
+  background: #f0ebe0;
+}
+.view-btn:active {
+  transform: translateY(1px);
 }
 
 .view-btn.active {
@@ -709,6 +719,9 @@ input[type="range"]::-webkit-slider-thumb {
 .tour-step:hover {
   background: rgba(60, 50, 39, 0.09);
   color: #3b3227;
+}
+.tour-step:active {
+  transform: translateY(1px);
 }
 
 .tour-step.active {
