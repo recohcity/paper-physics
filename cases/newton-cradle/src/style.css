@@ -644,6 +644,10 @@ input[type="range"]::-webkit-slider-thumb {
 .action-btn:hover {
   background: #e2dacb;
 }
+.action-btn:active {
+  transform: translateY(1px);
+  background: #d8cfbe;
+}
 
 .reset-btn {
   background: #c9b896;
@@ -652,6 +656,10 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .reset-btn:hover {
   background: #b8a67f;
+}
+.reset-btn:active {
+  transform: translateY(1px);
+  background: #a8966f;
 }
 
 .action-btn.icon-only {
