@@ -104,3 +104,15 @@ its own card. Do not guess which controls go together.
 - Every button/slider/toggle that is not part of the guided tour must live
   inside this panel. Never add a floating control outside it that would leak
   into tour mode.
+
+## Button micro-interactions (global)
+
+All `<button>` elements must have consistent hover/press feedback:
+
+```css
+button { transition: all 0.15s ease; }
+button:hover { transform: translateY(-1px); }
+button:active { transform: translateY(1px); }
+```
+
+This goes at the end of style.css as a global fallback — covers every button (nav, view, tour-step, material numbers, slider, speaker, reset) without per-class maintenance. Reset button uses warm tan `#c9b896`.
