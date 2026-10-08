@@ -21,10 +21,14 @@ controls in the smallest footprint possible:
 
 - Each functional group gets its own `.panel-section.throw-section` card.
 - Do **not** mix unrelated controls in one card.
+- **sketch2sim card is mandatory** — always present in every build panel.
+  Contains: label + badge, morph slider (0/33/66/100 = SKETCH/LIFT/MODEL/MATERIAL),
+  Reset button, sound toggle. Already in the template.
 - Typical split for a physics demo:
   - Card A: experiment controls (sliders, toggles, mode buttons)
   - Card B: object parameters (material switches, per-actor toggles)
-  - Card C: playback (Slow / Play / Reset / Sound)
+  - Card C: sketch2sim (mandatory, see above)
+  - Card D: playback (Slow / Play) — if not merged into sketch2sim footer
 - When the user says "独立卡片", that means a separate `.throw-section` div,
   not just another row inside the existing card.
 

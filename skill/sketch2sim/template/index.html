@@ -29,7 +29,30 @@
   </div>
 
   <!-- Build panel: cards go here, see references/panel-layout-standards.md -->
-  <div id="build-panel" class="build-panel hidden" style="display:flex;flex-direction:row;gap:6px;align-items:stretch;"></div>
+  <div id="build-panel" class="build-panel hidden" style="display:flex;flex-direction:row;gap:6px;align-items:stretch;">
+    <!-- Standard sketch2sim card (always present) -->
+    <div class="panel-section throw-section" style="padding:8px 12px;flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:4px;">
+      <div class="ctrl-group">
+        <div class="ctrl-label-row">
+          <label>sketch2sim</label>
+          <span class="value-badge" id="morph-stage">MATERIAL</span>
+        </div>
+        <input type="range" id="morph-slider" min="0" max="100" value="100" step="1">
+        <div class="morph-scale">
+          <span class="morph-tick t0"></span>
+          <span class="morph-tick t33"></span>
+          <span class="morph-tick t66"></span>
+          <span class="morph-tick t100"></span>
+        </div>
+      </div>
+      <div class="panel-footer">
+        <button id="btn-reset" class="action-btn">Reset</button>
+        <button id="panel-sound-btn" class="action-btn icon-only" title="Toggle Sound">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="./src/main.js"></script>
