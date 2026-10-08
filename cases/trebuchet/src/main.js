@@ -2257,9 +2257,15 @@ class App {
       this._dragPendulum = (this._dragPendulum || 0) * 0.90 + dragVel * 0.4;
       this.trebuchet.cwGroup.rotation.z = -(this.trebuchet.REST_ANGLE + THREE.MathUtils.degToRad(pullVal)) + this._dragPendulum;
 
-      // Continuous tilt sound: same crisp click on every drag frame
-      if (this.dragMoved && Math.abs(pullDelta) > 0.05) {
-        sound.playTilt(0.5);
+      // Tilt sound: play at fixed angle intervals, volume scales with drag speed
+      if (this.dragMoved && Math.abs(pullDelta) > 0.5) {
+        this._lastSoundAngle = this._lastSoundAngle ?? pullVal;
+        const angleStep = Math.abs(pullVal - this._lastSoundAngle);
+        if (angleStep > 3) { // every 3 degrees
+          const vol = Math.min(0.3, Math.abs(pullDelta) * 0.02);
+          sound.playTilt(vol);
+          this._lastSoundAngle = pullVal;
+        }
       }
     };
 

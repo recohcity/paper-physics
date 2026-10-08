@@ -115,6 +115,22 @@ Key points:
 - On window resize, re-call `setCameraView(currentView, 0)` to re-fit.
 - Empty-box fallback = paper view (2.5×1.5), prevents errors.
 
+## Environment lighting (IBL)
+
+Use a real HDR environment map for game-like reflections, not just RoomEnvironment:
+
+```js
+new RGBELoader().load('winter-forest_1k.exr', (tex) => {
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  scene.environment = tex;
+});
+scene.environmentIntensity = 0.5; // not 0!
+```
+
+- Fallback to RoomEnvironment if HDR fails to load.
+- `environmentIntensity = 0` disables IBL — set to 0.3–0.6 for visible reflections.
+- ACESFilmicToneMapping already enabled in template.
+
 ## Sketch normalization (user hand-drawn → standard assets)
 
 User provides one raw sketch photo. Process it into two assets:

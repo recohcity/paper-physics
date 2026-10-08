@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as TWEEN from '@tweenjs/tween.js';
 
@@ -136,7 +137,7 @@ class App {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     const LIGHT = {
       exposure: 1.08,
-      envIntensity: 0,
+      envIntensity: 0.5,
       ambient: { color: 0xffeed9, intensity: 0.95 },
       sun: { color: 0xfffaec, intensity: 2.3, position: [-2.5, 4.5, 3.2] },
       fill: { color: 0xdce7f6, intensity: 0.6, position: [3, 2, -1] },
@@ -146,9 +147,16 @@ class App {
     this.container.appendChild(this.renderer.domElement);
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.envMapTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environment = this.envMapTexture;
-    this.scene.environmentIntensity = LIGHT.envIntensity; // 0 = no global IBL wash
+    // Try real HDR environment for game-like reflections, fallback to Room
+    new RGBELoader().load('skarpa-winter-forest_1K.exr', (tex) => {
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      this.envMapTexture = tex;
+      this.scene.environment = tex;
+    }, undefined, () => {
+      this.envMapTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      this.scene.environment = this.envMapTexture;
+    });
+    this.scene.environmentIntensity = LIGHT.envIntensity;
 
     this.renderer.domElement.tabIndex = 1;
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
