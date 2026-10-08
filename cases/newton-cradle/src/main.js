@@ -1013,7 +1013,11 @@ class App {
       const btn = document.createElement('button');
       btn.textContent = i + 1;
       btn.title = `Ball ${i+1}: click to toggle metal/plastic`;
-      btn.style.cssText = 'height:20px;padding:0;font-size:10px;border-radius:4px;border:1px solid rgba(180,168,150,0.4);background:#c8ccd2;cursor:pointer;color:#333;font-weight:600;display:flex;align-items:center;justify-content:center;';
+      btn.style.cssText = 'height:20px;padding:0;font-size:10px;border-radius:4px;border:1px solid rgba(180,168,150,0.4);background:#c8ccd2;cursor:pointer;color:#333;font-weight:600;display:flex;align-items:center;justify-content:center;transition:all .15s;';
+      btn.addEventListener('mouseenter', () => { btn.style.opacity = '0.85'; });
+      btn.addEventListener('mouseleave', () => { btn.style.opacity = '1'; });
+      btn.addEventListener('mousedown', () => { btn.style.transform = 'translateY(1px)'; });
+      btn.addEventListener('mouseup', () => { btn.style.transform = 'translateY(0)'; });
       btn.addEventListener('click', () => {
         const cur = this.mechanism.ballTypes[i];
         const next = cur === 'steel' ? 'plastic' : 'steel';

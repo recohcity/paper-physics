@@ -235,6 +235,9 @@ body {
 .btn-primary:active {
   transform: translateY(1px);
 }
+.btn-secondary:active {
+  transform: translateY(1px);
+}
 
 .btn-secondary {
   background: #fdfaf4;
