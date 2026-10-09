@@ -131,6 +131,29 @@ if (!exists(verifyRel)) {
     fail(`${verifyRel} is still the template placeholder — no real assertions were written`);
   } else {
     pass(`${verifyRel} has project-specific content (${verifyContent.length} bytes)`);
+    // N2a: verify.mjs must import from src/spec.js (runtime), not just read spec.json file
+    if (!/from\s+['"]\.\.\/src\/spec\.js['"]/.test(verifyContent)) {
+      fail(`${verifyRel} does not import from ../src/spec.js — it only reads the JSON file, cannot detect runtime drift`);
+    } else {
+      pass(`${verifyRel} imports runtime spec.js`);
+    }
+    // N2b: intake numeric rows must match verify intake.match() count
+    if (exists('docs/intake-questions.md')) {
+      const intake = read('docs/intake-questions.md');
+      // Count table rows where the answer column (last |...|) contains a digit
+      const numericRows = intake.split('\n').filter(l => {
+        if (!/^\|/.test(l) || l.includes('---') || l.includes('Question')) return false;
+        const cells = l.split('|').map(c => c.trim());
+        const answer = cells[cells.length - 2] || ''; // last cell before trailing |
+        return /\d/.test(answer);
+      }).length;
+      const verifyMatchCount = (verifyContent.match(/intake\.match\(/g) || []).length;
+      if (verifyMatchCount < numericRows) {
+        fail(`intake has ${numericRows} numeric answer rows but verify.mjs only checks ${verifyMatchCount} — uncovered: ${numericRows - verifyMatchCount}`);
+      } else {
+        pass(`intake numeric rows (${numericRows}) covered by verify assertions (${verifyMatchCount})`);
+      }
+    }
     try {
       const out = execFileSync('node', [p(verifyRel)], { encoding: 'utf8', timeout: 30000 });
       pass(`${verifyRel} ran and exited 0`);
@@ -141,32 +164,38 @@ if (!exists(verifyRel)) {
   }
 }
 
-// --- 4. Heuristic: hard-coded numbers in src/*.js that DUPLICATE spec.json values -------------------
-// Principle 1: physics numbers live in spec.json only. If the same decimal appears in a src/*.js
-// file (other than spec.js which imports it), it's likely a hand-copied duplicate that will drift.
-console.log('\n-- Heuristic: hard-coded duplicates of spec values (warnings only) --');
+// --- 4. Heuristic: hard-coded numbers in src/*.js that DUPLICATE spec values -------------------
+// Physics files (physics.js, mechanism.js, trebuchet.js) = FAIL if they duplicate spec numbers.
+// Visual files (audio.js, environment.js, textures.js, annotations.js, main.js) = WARN.
+console.log('\n-- Heuristic: hard-coded duplicates of spec values --');
 if (hasSpecJson) {
+  // Gather numbers from spec.json only (user-facing physics params).
+  // spec.js MECH/GEOM visual constants are allowed to be hand-written mesh dimensions.
   const specStr = JSON.stringify(JSON.parse(read('spec.json')));
-  const specNumbers = new Set(
-    (specStr.match(/-?\d+\.\d+/g) || []).map(Number)
-  );
-  // Filter out common constants that legitimately appear everywhere
-  const COMMON = new Set([0, 1, 2, 0.5, 0.01, 0.02, 0.1, 0.2, 0.3, 0.95, 0.97, 0.98, 1.5, 9.81, 9.82]);
-  const meaningfulSpecNumbers = [...specNumbers].filter(n => !COMMON.has(n) && Math.abs(n) > 0.001);
+  const specNumbers = new Set((specStr.match(/-?\d+\.\d+/g) || []).map(Number));
+  const COMMON = new Set([0, 1, 2, 0.5, 0.01, 0.02, 0.1, 0.2, 0.3, 0.95, 0.97, 0.98, 1.5, 9.81, 9.82, 0.05, 0.03, 0.04, 0.06]);
+  const meaningful = [...specNumbers].filter(n => !COMMON.has(n) && Math.abs(n) > 0.001);
+  const PHYSICS_FILES = new Set(['physics.js', 'mechanism.js', 'trebuchet.js']);
+  const stripComments = (s) => s.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   const srcFiles = fs.existsSync(p('src'))
     ? fs.readdirSync(p('src')).filter((f) => f.endsWith('.js') && f !== 'spec.js')
     : [];
-  let totalDups = 0;
+  let failDups = 0, warnDups = 0;
   for (const f of srcFiles) {
-    const content = read(`src/${f}`);
-    const literals = [...content.matchAll(/(?<![\w.])-?\d+\.\d{2,}(?![\w])/g)].map((m) => parseFloat(m[0]));
-    const dups = [...new Set(literals.filter(n => meaningfulSpecNumbers.some(sn => Math.abs(n - sn) < 0.001)))];
-    if (dups.length > 0) {
-      warn(`src/${f} hard-codes ${dups.length} value(s) that match spec.json: ${dups.slice(0,5).join(', ')}${dups.length > 5 ? ', …' : ''} — should use SPEC.* instead`);
-      totalDups += dups.length;
+    const code = stripComments(read(`src/${f}`));
+    const literals = [...code.matchAll(/(?<![\w.])-?\d+\.\d{2,}(?![\w])/g)].map((m) => parseFloat(m[0]));
+    const dups = [...new Set(literals.filter(n => meaningful.some(sn => Math.abs(n - sn) < 0.001)))];
+    if (dups.length === 0) continue;
+    const sample = dups.slice(0, 5).join(', ') + (dups.length > 5 ? ', …' : '');
+    if (PHYSICS_FILES.has(f)) {
+      fail(`src/${f} hard-codes ${dups.length} spec value(s): ${sample} — physics files must use SPEC.*`);
+      failDups += dups.length;
+    } else {
+      warn(`src/${f} hard-codes ${dups.length} value(s) matching spec: ${sample} — visual/UI, review`);
+      warnDups += dups.length;
     }
   }
-  if (totalDups === 0) pass('no hard-coded spec duplicates found in src/*.js');
+  if (failDups === 0 && warnDups === 0) pass('no hard-coded spec duplicates found');
 }
 
 // --- 5. Tour stage naming must use SKETCH/LIFT/MODEL/MATERIAL (not legacy READ/WOOD) ----

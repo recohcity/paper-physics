@@ -1,14 +1,26 @@
 import * as CANNON from 'cannon-es';
 import * as THREE from 'three';
 import { sound } from './audio.js';
-import { MECH } from './spec.js';
+import { SPEC, MECH } from './spec.js';
+
+// Pure function returning physics values used at runtime.
+export function resolveParams() {
+  return {
+    ballKgDefault: SPEC.physics.ballKg.default,
+    ballKgMin: SPEC.physics.ballKg.min,
+    ballKgMax: SPEC.physics.ballKg.max,
+    armLongX: MECH.arm_x1,
+    armShortX: MECH.arm_x2,
+    restAngle: SPEC.physics.restAngle,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // SCALE ANCHOR: 1 scene unit = 1 m (single source of truth; audit F3).
 // Gravity (9.82), masses (kg), densities (kg/m³) and mm display all derive
-// from it.  All mechanism numbers (arm x ∈ [-0.596, 0.315], rest angle -1.00,
+// from it.  All mechanism numbers (arm x ∈ [-0.596, 0.17], rest angle -1.571,
 // apexY 0.5964 hover geometry, counterweight slider 1.40-10.0 (default 4.8), ball slider
-// 0.30-0.60) live in src/spec.js — mirrors skill sketch2sim spec.json.
+// 0.30-0.60) live in src/spec.js — single source of truth via spec.json.
 // Lower bound 1.40 kg keeps the released arm from inverting (mech2d sweep);
 // below it the throw stalls.  The upper bound is open to 10.0 kg (sand full);
 // a heavier BALL than counterweight is a normal seesaw — the arm simply settles
@@ -187,8 +199,8 @@ export class PhysicsWorld {
     this._mechLc = MECH.hang + MECH.box / 2;
     this._mechCwMass = 1.00;
     this._mechCwBox = MECH.box;
-    this.ballKg = 0.45;      // projectile, adjustable via BALL slider
-    this.ballRadius = 0.03;  // 0.45 kg -> 60% of bowl opening (see setBall)
+    this.ballKg = SPEC.physics.ballKg.default;      // adjustable via BALL slider
+    this.ballRadius = 0.03;  // derived from default ball kg (see setBall)
   }
 
   // Sync chassis/frame colliders with the 3D group (recoil).  Call every
@@ -404,8 +416,9 @@ export class PhysicsWorld {
 
   setBall(kg) {
     this.ballKg = kg;
-    const ratio = 0.60 + ((kg - 0.45) / 0.15) * 0.20; // 60%..80% over 0.45..0.60
-    this.ballRadius = 0.05 * ratio; // bowl inner radius 0.05 m
+    const bMin = SPEC.physics.ballKg.min, bMax = SPEC.physics.ballKg.max;
+    const ratio = 0.60 + ((kg - bMin) / (bMax - bMin)) * 0.20; // 60%..80% across range
+    this.ballRadius = MECH.cup_ri * ratio; // bowl inner radius
     if (this.ballBody) {
       this.ballBody.removeShape(this.ballShape);
       this.ballShape = new CANNON.Sphere(this.ballRadius);

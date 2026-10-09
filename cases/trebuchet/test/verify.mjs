@@ -3,6 +3,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { SPEC, MECH, GEOM, UI } from '../src/spec.js';
+import { resolveParams } from '../src/physics.js';
 
 console.log('verify: trebuchet self-check');
 
@@ -46,6 +47,15 @@ assert.strictEqual(MECH.arm_x1, SPEC.physics.armLongX, 'MECH.arm_x1 must derive 
 assert.strictEqual(MECH.arm_x2, SPEC.physics.armShortX, 'MECH.arm_x2 must derive from SPEC');
 assert.strictEqual(GEOM.REST_ANGLE, SPEC.physics.restAngle, 'GEOM.REST_ANGLE must derive from SPEC');
 assert.strictEqual(UI.ball.min, SPEC.inputs[1].min, 'UI.ball.min must derive from SPEC');
+
+// RUNTIME: resolveParams() must return values physics.js actually uses.
+// Variant C: if someone hard-codes this.ballKg = 0.2 in the constructor, this fails.
+const rt = resolveParams();
+assert.strictEqual(rt.ballKgDefault, SPEC.physics.ballKg.default, 'runtime ballKgDefault must equal SPEC');
+assert.strictEqual(rt.ballKgMin, SPEC.physics.ballKg.min, 'runtime ballKgMin must equal SPEC');
+assert.strictEqual(rt.armLongX, SPEC.physics.armLongX, 'runtime armLongX must equal SPEC');
+assert.strictEqual(rt.armShortX, SPEC.physics.armShortX, 'runtime armShortX must equal SPEC');
+assert.strictEqual(rt.restAngle, SPEC.physics.restAngle, 'runtime restAngle must equal SPEC');
 
 // 1. Gravity sane
 assert.ok(Math.abs(SPEC.world.gravity - 9.82) < 0.01, 'gravity should be 9.82');

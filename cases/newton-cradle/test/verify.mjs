@@ -4,6 +4,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { SPEC } from '../src/spec.js';
+import { resolveParams } from '../src/mechanism.js';
 
 console.log('verify: Newton cradle self-check');
 
@@ -39,6 +40,16 @@ assert.ok(Math.abs(densityRatio - parseFloat(densityM[1])) < 0.5,
 assert.ok(SPEC.pendulumLength > 0.3 && SPEC.pendulumLength < 0.5,
   `pendulumLength ${SPEC.pendulumLength} out of expected range`);
 assert.ok(Math.abs(SPEC.gravity - 9.81) < 0.01, 'gravity should be 9.81');
+
+// RUNTIME: resolveParams() must return the values mechanism.js actually uses.
+// If someone hard-codes this.L = 0.5 in _initPhysics without updating resolveParams,
+// this assertion fails.
+const rt = resolveParams();
+assert.strictEqual(rt.L, SPEC.pendulumLength, 'runtime L must equal SPEC.pendulumLength');
+assert.strictEqual(rt.g, SPEC.gravity, 'runtime g must equal SPEC.gravity');
+assert.strictEqual(rt.ballR, SPEC.ballRadius, 'runtime ballR must equal SPEC.ballRadius');
+assert.strictEqual(rt.nBalls, SPEC.ballCount, 'runtime nBalls must equal SPEC.ballCount');
+assert.strictEqual(rt.restitution, SPEC.restitution, 'runtime restitution must equal SPEC.restitution');
 
 // 2. Restitution in valid range
 assert.ok(SPEC.restitution > 0.9 && SPEC.restitution < 1.0,

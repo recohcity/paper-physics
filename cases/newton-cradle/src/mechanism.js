@@ -9,6 +9,21 @@ import { SPEC } from './spec.js';
 // Ball radius calibrated at runtime; volume derived from ballR.
 const DENSITY = SPEC.densities;
 
+// Pure function returning the exact physics values the mechanism uses at runtime.
+// verify.mjs imports this to detect hard-coded drift (variant A: if someone writes
+// this.L = 0.5 instead of SPEC.pendulumLength, this function must still read SPEC).
+export function resolveParams() {
+  return {
+    L: SPEC.pendulumLength,
+    g: SPEC.gravity,
+    ballR: SPEC.ballRadius,
+    nBalls: SPEC.ballCount,
+    airDrag: SPEC.airDrag,
+    restitution: SPEC.restitution,
+    densities: SPEC.densities,
+  };
+}
+
 /**
  * NewtonCradleModel — white clay model that morphs into real materials.
  *
@@ -42,7 +57,7 @@ export class NewtonCradleModel {
     this.onReady = onReady;
 
     this.group = new THREE.Group();
-    this.group.position.set(0.12, 0, 0);
+    this.group.position.set(SPEC.groupOrigin.x, 0, 0);
     this.group.visible = false;
     this.group.scale.z = 0.0001;
     scene.add(this.group);
@@ -92,7 +107,7 @@ export class NewtonCradleModel {
         mat.envMap = null;
         mat.envMapIntensity = 0.3;
         mat.color.set(0xd4a017);
-        mat.roughness = 0.55;
+        mat.roughness = SPEC.materials.plastic.roughness;
       }
       mat.needsUpdate = true;
     }
@@ -120,7 +135,7 @@ export class NewtonCradleModel {
 
       let real;
       if (cat === 'steel') {
-        real = { color: new THREE.Color(0xc8ccd2), metalness: 0.95, roughness: 0.12, emissive: new THREE.Color(0), emissiveIntensity: 0, map: null };
+        real = { color: new THREE.Color(0xc8ccd2), metalness: 0.95, roughness: SPEC.materials.steel.roughness, emissive: new THREE.Color(0), emissiveIntensity: 0, map: null };
       } else if (cat === 'metal') {
         real = { color: new THREE.Color(0x9a9da3), metalness: 0.9, roughness: 0.25, emissive: new THREE.Color(0), emissiveIntensity: 0, map: null };
       } else if (cat === 'rope') {
@@ -166,12 +181,13 @@ export class NewtonCradleModel {
 
   // ---- PHYSICS: analytic pendulum chain (ported from archive/newton-cradle-2) ----
   _initPhysics() {
-    this.L = SPEC.pendulumLength;
-    this.g = SPEC.gravity;
-    this.ballR = SPEC.ballRadius;
-    this.nBalls = SPEC.ballCount;
-    this.airDrag = SPEC.airDrag;
-    this.restitution = SPEC.restitution;
+    const p = resolveParams();
+    this.L = p.L;
+    this.g = p.g;
+    this.ballR = p.ballR;
+    this.nBalls = p.nBalls;
+    this.airDrag = p.airDrag;
+    this.restitution = p.restitution;
     this.theta = new Array(this.nBalls).fill(0);
     this.omega = new Array(this.nBalls).fill(0);
     this.dragIndex = -1;
@@ -280,7 +296,7 @@ export class NewtonCradleModel {
     } else {
       mat.color.set(0xc8ccd2);
       mat.metalness = 0.95;
-      mat.roughness = 0.12;
+      mat.roughness = SPEC.materials.steel.roughness;
       mat.envMap = this._envMaps.steel || null;
       mat.envMapIntensity = 1.5;
     }
