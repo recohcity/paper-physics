@@ -47,3 +47,6 @@ export const UI = {
   morph:         { min: 0, max: 100, value: 100, step: 1 },
   zoom:          { min: 60, max: 200, value: 160, step: 5 },
 };
+
+// --- Derived: lever ratio from actual geometry (not a hand-written constant) ---
+export const derivedLeverRatio = GEOM.LONG_ARM / GEOM.cwPivotX;

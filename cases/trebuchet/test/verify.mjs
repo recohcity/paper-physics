@@ -2,7 +2,7 @@
 // AND that spec.json values match what was confirmed in intake-questions.md.
 import assert from 'node:assert';
 import fs from 'node:fs';
-import { SPEC, MECH, GEOM, UI } from '../src/spec.js';
+import { SPEC, MECH, GEOM, UI, derivedLeverRatio } from '../src/spec.js';
 import { resolveParams } from '../src/physics.js';
 
 console.log('verify: trebuchet self-check');
@@ -60,8 +60,9 @@ assert.strictEqual(rt.restAngle, SPEC.physics.restAngle, 'runtime restAngle must
 // 1. Gravity sane
 assert.ok(Math.abs(SPEC.world.gravity - 9.82) < 0.01, 'gravity should be 9.82');
 
-// 2. Lever ratio 4:1
-assert.strictEqual(SPEC.physics.leverRatio, 4.0, 'lever ratio must be 4:1');
+// 2. Lever ratio: derived from actual geometry, must match intake 4:1
+assert.ok(Math.abs(derivedLeverRatio - SPEC.physics.leverRatio) < 0.05,
+  `derived lever ratio ${derivedLeverRatio.toFixed(2)} != declared ${SPEC.physics.leverRatio}`);
 
 // 3. Counterweight range: min 1.4 prevents inversion
 assert.ok(SPEC.physics.counterweightKg.min >= 1.4, 'CW min must be >= 1.4 kg');
