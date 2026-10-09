@@ -1,59 +1,49 @@
-// ---------------------------------------------------------------------------
-// spec.js — 运行时单一数据源 (single source of truth)
-//
-// Mirrors skill/sketch2sim/examples/trebuchet.spec.json.  Every physical
-// dimension, geometry constant, UI slider range and display unit is written
-// HERE once; physics.js / trebuchet.js / main.js import from this module.
-// Do NOT hand-write the same number in two places (sketch2sim principle 1).
-//
-// Provenance tags follow the skill vocabulary: declared / measured / derived /
-// assumed / fitted.  Numbers here must match the Spec file; change both in sync.
-// ---------------------------------------------------------------------------
+// spec.js — runtime single source of truth
+// Imports spec.json as the data source; only adds derived/visual constants here.
+import spec from '../spec.json' with { type: 'json' };
 
-// --- Mechanism (physics bodies + 3D model, metres) -------------------------
-// LONG_ARM is the visual beam length; MECH.arm_x1 is the physical material
-// extent used for mass/inertia. They differ by design (the cup overhangs the
-// beam end); keep the gap documented rather than silently equal.
+export const SPEC = spec;
+
+// --- Derived mechanism constants (visual + inertial, metres) --------------
 export const MECH = {
-  arm_x1: -0.596,   // long-arm physical extent (mass/inertia)  [code-extraction]
-  arm_x2: 0.17,     // short-arm end = 1/4 of the long arm (4:1 lever) [user:2026-09-29]
-  arm_ty: 0.042,    // beam thickness y                         [code-extraction]
-  arm_dz: 0.034,    // beam depth z                             [code-extraction]
-  rho: 160,         // balsa density kg/m^3                     [assumed:balsa]
-  cup_x: -0.65,     // cup centre, arm-local                     [code-extraction]
+  arm_x1: spec.physics.armLongX,   // -0.596 long-arm physical extent
+  arm_x2: spec.physics.armShortX,  // 0.17 short-arm end (4:1 lever)
+  arm_ty: 0.042,                   // beam thickness y
+  arm_dz: 0.034,                  // beam depth z
+  rho: 160,                       // balsa density kg/m^3
+  cup_x: -0.65,
   cup_y: 0.021,
-  cup_ri: 0.05,     // cup inner radius (bore 100 mm)           [code-extraction]
+  cup_ri: 0.05,
   cup_ro: 0.07,
-  ball_x: -0.65,    // ball rest centre, arm-local               [code-extraction]
+  ball_x: -0.65,
   ball_y: 0.017,
-  ball_r_default: 0.03, // 0.45 kg -> 60% of cup bore           [derived]
-  pin_x: 0.155,     // counterweight hanger pin = 1/4L          [user:2026-09-29]
-  hang: 0.10,       // hanging link length                      [code-extraction]
-  box: 0.13,        // counterweight box size                   [code-extraction]
+  ball_r_default: 0.03,
+  pin_x: 0.155,
+  hang: 0.10,
+  box: 0.13,
 };
 
-// --- Geometry (3D model, metres) -------------------------------------------
+// --- Visual geometry --------------------------------------------------------
 export const GEOM = {
-  SHORT_ARM: 0.17,      // visual short arm (== MECH.arm_x2, 4:1 lever)
-  LONG_ARM: 0.62,       // visual long arm (== -MECH.arm_x1 + 0.024 overhang)
-  CW_HANG: 0.10,        // == MECH.hang
+  SHORT_ARM: spec.physics.armShortX,
+  LONG_ARM: 0.62,
+  CW_HANG: MECH.hang,
   apexX: 0.02,
-  apexY: 0.5964,        // pivot height: box bottom = apexY - 0.476 = 0.1204,
-                        // 20 mm hover gap above deckTopY           [fitted:hover]
-  REST_ANGLE: -1.571,   // rad (-90°): release at the vertical (cup at the top, ball leaves level) [user:2026-09-29]
-  cupR: 0.05,           // == MECH.cup_ri (visual)
-  cupCenterX: -0.62 - 0.05 + 0.02, // derived: -LONG_ARM - cupR + 0.02
-  cwPivotX: 0.17 - 0.015,         // derived: SHORT_ARM - 0.015 (hanger pin, 4:1 lever)
-  cwSize: 0.13,         // == MECH.box (visual box)
-  deckTopY: 0.10,       // deck box top surface
-  deckThickness: 0.07,  // thickened deck box: y in [0.03, 0.10]
+  apexY: 0.5964,
+  REST_ANGLE: spec.physics.restAngle,  // -1.571 rad
+  cupR: MECH.cup_ri,
+  cupCenterX: -0.62 - 0.05 + 0.02,
+  cwPivotX: spec.physics.armShortX - 0.015,
+  cwSize: MECH.box,
+  deckTopY: 0.10,
+  deckThickness: 0.07,
 };
 
-// --- UI sliders (mirror index.html and the Spec inputs) --------------------
+// --- UI sliders -------------------------------------------------------------
 export const UI = {
-  counterweight: { min: 1.40, max: 10, value: 4.80, step: 0.01 }, // sand full = 10 kg [user:2026-09-30]; 4:1 lever: cw>=4.8 (v>=3.1 m/s) topples the 3rd layer; cw 3.70 falls short of the pyramid front edge; 10.00 -> max power
-  ball:          { min: 0.30, max: 0.60, value: 0.45, step: 0.01 },
-  pull:          { min: 0, max: 135, value: 0, step: 0.5 }, // 135° = 45° from the mast (max energy, 4:1 lever [user:2026-09-29]); mirrors index.html #pull-slider
+  counterweight: { min: spec.inputs[0].min, max: spec.inputs[0].max, value: spec.inputs[0].value, step: spec.inputs[0].step },
+  ball:          { min: spec.inputs[1].min, max: spec.inputs[1].max, value: spec.inputs[1].value, step: spec.inputs[1].step },
+  pull:          { min: spec.inputs[2].min, max: spec.inputs[2].max, value: spec.inputs[2].value, step: spec.inputs[2].step },
   morph:         { min: 0, max: 100, value: 100, step: 1 },
   zoom:          { min: 60, max: 200, value: 160, step: 5 },
 };

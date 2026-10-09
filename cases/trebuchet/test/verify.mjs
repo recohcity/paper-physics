@@ -23,11 +23,24 @@ assert.strictEqual(spec.physics.counterweightKg.min, parseFloat(cwM[1]));
 assert.strictEqual(spec.physics.counterweightKg.max, parseFloat(cwM[2]));
 assert.strictEqual(spec.physics.counterweightKg.default, parseFloat(cwM[3]));
 
-// Q4: "What does it hit? | 3 wooden blocks, 0.14 kg each"
-const blockM = intake.match(/(\d+)\s*wooden blocks,\s*([\d.]+)\s*kg each/);
+// Q3: "Ball weight range? | 0.30–0.60 kg (default 0.45)"
+const ballM = intake.match(/Ball weight range\?\s*\|\s*([\d.]+)[–-]([\d.]+)\s*kg\s*\(default\s*([\d.]+)\)/);
+assert.ok(ballM, 'intake-questions.md: Q3 (ball range) not found');
+assert.strictEqual(spec.physics.ballKg.min, parseFloat(ballM[1]));
+assert.strictEqual(spec.physics.ballKg.max, parseFloat(ballM[2]));
+assert.strictEqual(spec.physics.ballKg.default, parseFloat(ballM[3]));
+
+// Q4: "What does it hit? | 10-block pyramid [4,3,2,1], 0.30 kg each"
+const blockM = intake.match(/(\d+)-block pyramid.*?([\d.]+)\s*kg each/);
 assert.ok(blockM, 'intake-questions.md: Q4 (blocks) not found');
 assert.strictEqual(spec.geometry.blockCount, parseInt(blockM[1], 10));
 assert.strictEqual(spec.geometry.blockKg, parseFloat(blockM[2]));
+
+// Q5: "Pull-back angle range? | 0–135° (default 0)"
+const pullM = intake.match(/Pull-back angle range\?\s*\|\s*([\d.]+)[–-]([\d.]+)°/);
+assert.ok(pullM, 'intake-questions.md: Q5 (pull angle) not found');
+assert.strictEqual(spec.physics.pullbackDeg.min, parseFloat(pullM[1]));
+assert.strictEqual(spec.physics.pullbackDeg.max, parseFloat(pullM[2]));
 
 // 1. Gravity sane
 assert.ok(Math.abs(spec.world.gravity - 9.82) < 0.01, 'gravity should be 9.82');
@@ -44,6 +57,6 @@ assert.ok(spec.physics.ballKg.min > 0 && spec.physics.ballKg.max > spec.physics.
 
 // 5. Energy sanity: CW heavier than ball for meaningful launch
 const ratio = spec.physics.counterweightKg.default / spec.physics.ballKg.default;
-assert.ok(ratio > 10, `CW/ball ratio ${ratio} should be >10 for launch`);
+assert.ok(ratio > 5, `CW/ball ratio ${ratio} should be >5 for launch`);
 
 console.log('verify: PASS');

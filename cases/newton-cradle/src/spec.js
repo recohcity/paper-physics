@@ -1,18 +1,19 @@
-// spec.js — single runtime source of truth for Newton's cradle.
-// Mirrors spec.json. Imported by mechanism.js.
+// spec.js — runtime single source of truth.
+// Imports spec.json as the data source; only adds derived values here.
+import spec from '../spec.json' with { type: 'json' };
 
 export const SPEC = {
-  name: 'newton-cradle',
-  gravity: 9.81,
-  pendulumLength: 0.343,
-  ballRadius: 0.0247,
-  restitution: 0.97,
-  airDrag: 0.01,
-  angleLimit: Math.PI / 2 - 0.02,
-  ballCount: 5,
+  ...spec,
+  gravity: spec.world.gravity,
+  pendulumLength: spec.physics.pendulumLength,
+  ballRadius: spec.physics.ballRadius,
+  restitution: spec.physics.restitution,
+  airDrag: spec.physics.airDrag,
+  angleLimit: spec.physics.angleLimit,
+  ballCount: spec.geometry.ballCount,
+  groupOrigin: spec.geometry.groupOrigin,
   densities: {
-    steel: 7850,
-    plastic: 1050,
+    steel: spec.materials.steel.density,
+    plastic: spec.materials.plastic.density,
   },
-  groupOrigin: { x: 0.12, y: 0, z: 0 },
 };
