@@ -68,14 +68,16 @@ if (exists(specJsRel)) {
   if (/no physics yet|reserved;? not built|workstream b/i.test(specJsContent)) {
     fail(`${specJsRel} still contains placeholder/stub language — never filled in for real`);
   }
+  // R1: spec.js must import from '../spec.json' (single source of truth), not hand-copy numbers
+  if (!/from\s+['"]\.\.\/spec\.json['"]/.test(specJsContent)) {
+    fail(`${specJsRel} does not import from '../spec.json' — numbers are hand-copied, principle 1 violated`);
+  } else {
+    pass(`${specJsRel} imports from spec.json (single source of truth)`);
+  }
   // Is spec.js actually imported anywhere outside itself? If not, it is decorative.
   const srcFiles = fs.existsSync(p('src'))
     ? fs.readdirSync(p('src')).filter((f) => f.endsWith('.js') && f !== 'spec.js')
     : [];
-  // An import statement alone proves nothing — the binding has to actually be dereferenced downstream,
-  // or it is dead code wearing a "this is wired to the Spec" costume. Extract the imported names from
-  // `import { A, B as C } from './spec.js'` / `import X from './spec.js'`, then require each one to be
-  // referenced (as `Name.` or bare `Name`) at least once outside its own import line.
   const importers = [];
   const importedButUnused = [];
   for (const f of srcFiles) {
@@ -96,13 +98,13 @@ if (exists(specJsRel)) {
     fail(`src/spec.js exists but is not imported by any other src/*.js file — it is dead code, not a source of truth`);
   } else if (importedButUnused.length > 0) {
     for (const { file, names } of importedButUnused) {
-      fail(`src/${file} imports {${names.join(', ')}} from spec.js but never references ${names.length > 1 ? 'them' : 'it'} again — the import is decorative, physics values are likely hard-coded separately. Grep for the literal numbers from spec.json inside src/${file} to confirm.`);
+      fail(`src/${file} imports {${names.join(', ')}} from spec.js but never references them again — the import is decorative.`);
     }
   } else {
-    pass(`src/spec.js is imported AND the imported binding is actually referenced in: ${importers.join(', ')}`);
+    pass(`src/spec.js is imported AND the binding is actually referenced in: ${importers.join(', ')}`);
   }
 } else {
-  warn(`${specJsRel} not found (ok if this domain genuinely has no runtime-tunable spec, otherwise should exist)`);
+  warn(`${specJsRel} not found`);
 }
 
 // --- 2. The three user gates must have left a record ---------------------------------------------------
@@ -139,24 +141,32 @@ if (!exists(verifyRel)) {
   }
 }
 
-// --- 4. Heuristic: hard-coded numbers in mechanism.js that don't trace to spec.json --------------------
-console.log('\n-- Heuristic: possible hard-coded quantities (warnings only) --');
-const mechRel = 'src/mechanism.js';
-if (exists(mechRel) && hasSpecJson) {
-  const mech = read(mechRel);
-  const specValues = new Set(
-    JSON.stringify(JSON.parse(read('spec.json'))).match(/-?\d+\.\d+/g) || []
+// --- 4. Heuristic: hard-coded numbers in src/*.js that DUPLICATE spec.json values -------------------
+// Principle 1: physics numbers live in spec.json only. If the same decimal appears in a src/*.js
+// file (other than spec.js which imports it), it's likely a hand-copied duplicate that will drift.
+console.log('\n-- Heuristic: hard-coded duplicates of spec values (warnings only) --');
+if (hasSpecJson) {
+  const specStr = JSON.stringify(JSON.parse(read('spec.json')));
+  const specNumbers = new Set(
+    (specStr.match(/-?\d+\.\d+/g) || []).map(Number)
   );
-  const mechNumbers = [...mech.matchAll(/(?<![\w.])-?\d+\.\d{2,}(?![\w])/g)].map((m) => m[0]);
-  const untraced = mechNumbers.filter((n) => !specValues.has(n));
-  const uniqueUntraced = [...new Set(untraced)];
-  if (uniqueUntraced.length > 0) {
-    warn(`${mechRel} has ${uniqueUntraced.length} decimal literal(s) not found anywhere in spec.json — ` +
-      `may be fine (tolerances, epsilons) or may be quantities that should be declared. Sample: ` +
-      `${uniqueUntraced.slice(0, 8).join(', ')}${uniqueUntraced.length > 8 ? ', …' : ''}`);
-  } else {
-    pass(`no untraced decimal literals found in ${mechRel}`);
+  // Filter out common constants that legitimately appear everywhere
+  const COMMON = new Set([0, 1, 2, 0.5, 0.01, 0.02, 0.1, 0.2, 0.3, 0.95, 0.97, 0.98, 1.5, 9.81, 9.82]);
+  const meaningfulSpecNumbers = [...specNumbers].filter(n => !COMMON.has(n) && Math.abs(n) > 0.001);
+  const srcFiles = fs.existsSync(p('src'))
+    ? fs.readdirSync(p('src')).filter((f) => f.endsWith('.js') && f !== 'spec.js')
+    : [];
+  let totalDups = 0;
+  for (const f of srcFiles) {
+    const content = read(`src/${f}`);
+    const literals = [...content.matchAll(/(?<![\w.])-?\d+\.\d{2,}(?![\w])/g)].map((m) => parseFloat(m[0]));
+    const dups = [...new Set(literals.filter(n => meaningfulSpecNumbers.some(sn => Math.abs(n - sn) < 0.001)))];
+    if (dups.length > 0) {
+      warn(`src/${f} hard-codes ${dups.length} value(s) that match spec.json: ${dups.slice(0,5).join(', ')}${dups.length > 5 ? ', …' : ''} — should use SPEC.* instead`);
+      totalDups += dups.length;
+    }
   }
+  if (totalDups === 0) pass('no hard-coded spec duplicates found in src/*.js');
 }
 
 // --- 5. Tour stage naming must use SKETCH/LIFT/MODEL/MATERIAL (not legacy READ/WOOD) ----

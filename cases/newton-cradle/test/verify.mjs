@@ -22,6 +22,19 @@ assert.ok(restM, 'intake-questions.md: Q5 (restitution) not found');
 assert.strictEqual(SPEC.restitution, parseFloat(restM[1]),
   `SPEC.restitution=${SPEC.restitution} but intake Q5 says "${restM[1]}"`);
 
+// Q3: "Bidirectional: how many balls per side? | 1 ball or 2 balls"
+const bpsM = intake.match(/balls per side\?\s*\|\s*\d+\s*ball\s*or\s*(\d+)\s*balls?/);
+assert.ok(bpsM, 'intake-questions.md: Q3 (balls per side) not found');
+assert.strictEqual(SPEC.inputs[2].max, parseInt(bpsM[1], 10),
+  `SPEC.inputs[2].max=${SPEC.inputs[2].max} but intake Q3 says max "${bpsM[1]}"`);
+
+// Q4: "Material switching effect? | Plastic = amber matte, 1/7.5 mass of steel"
+const densityM = intake.match(/1\/([\d.]+)\s*mass of steel/);
+assert.ok(densityM, 'intake-questions.md: Q4 (plastic density ratio) not found');
+const densityRatio = SPEC.densities.steel / SPEC.densities.plastic;
+assert.ok(Math.abs(densityRatio - parseFloat(densityM[1])) < 0.5,
+  `steel/plastic ratio ${densityRatio.toFixed(2)} should be ~${densityM[1]}`);
+
 // 1. Pendulum length and gravity are sane
 assert.ok(SPEC.pendulumLength > 0.3 && SPEC.pendulumLength < 0.5,
   `pendulumLength ${SPEC.pendulumLength} out of expected range`);
