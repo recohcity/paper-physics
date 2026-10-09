@@ -290,7 +290,7 @@ export class NewtonCradleModel {
     if (type === 'plastic') {
       mat.color.set(0xd4a017);  // amber yellow
       mat.metalness = 0.0;
-      mat.roughness = 0.55;      // matte plastic with soft highlight
+      mat.roughness = SPEC.materials.plastic.roughness;      // matte plastic
       mat.envMap = null;
       mat.envMapIntensity = 0.3;
     } else {

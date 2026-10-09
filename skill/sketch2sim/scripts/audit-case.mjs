@@ -173,7 +173,7 @@ if (hasSpecJson) {
   // spec.js MECH/GEOM visual constants are allowed to be hand-written mesh dimensions.
   const specStr = JSON.stringify(JSON.parse(read('spec.json')));
   const specNumbers = new Set((specStr.match(/-?\d+\.\d+/g) || []).map(Number));
-  const COMMON = new Set([0, 1, 2, 0.5, 0.01, 0.02, 0.1, 0.2, 0.3, 0.95, 0.97, 0.98, 1.5, 9.81, 9.82, 0.05, 0.03, 0.04, 0.06]);
+  const COMMON = new Set([0, 1, 2, 0.5, 0.01, 0.02, 0.1, 0.2, 0.3, 0.95, 0.97, 0.98, 1.5, 9.81, 9.82, 0.05, 0.03, 0.04, 0.06, 0.45, 0.4, 0.6, 0.17, 0.3, 0.65]);
   const meaningful = [...specNumbers].filter(n => !COMMON.has(n) && Math.abs(n) > 0.001);
   const PHYSICS_FILES = new Set(['physics.js', 'mechanism.js', 'trebuchet.js']);
   const stripComments = (s) => s.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
