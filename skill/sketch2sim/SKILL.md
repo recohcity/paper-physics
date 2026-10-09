@@ -179,14 +179,22 @@ or fix styling. Only pause for the three gates below.
 ### Step 11 — Lobby Integration & Delivery
 - **Read pitfalls:** [step11] #35, #39, #40.
 - **Agent does:** screenshot sketch, add lobby card, build all cases, write README.
+- **Verification chain (non-negotiable):**
+  1. **Requirements** = docs/intake-questions.md (user-confirmed Q&A answers)
+  2. **Verification criteria** = test/verify.mjs assertions derived FROM those answers
+  3. **Result** = does the running implementation match requirements?
+  - Never write docs to pass the script. Never write assertions that don't trace back to an intake answer.
+  - Two parts to every self-check:
+    - **Public/template part:** standard layout, button styles, tour stages, reset behavior — checked by audit-case.mjs
+    - **Project-specific part:** physics values, interaction behavior, material properties — checked by verify.mjs assertions that quote the intake answer
 - **GATE — mechanical audit (hard):** run
   `node skill/sketch2sim/scripts/audit-case.mjs cases/<slug>`
   **exit code MUST be 0** before handoff. If exit 1, fix the FAIL items — do
-  not mark the case done. This checks spec.json, spec.js wiring (imported AND
-  actually referenced), docs/ six artifacts, test/verify.mjs runs and passes.
-  Items checked by the script are listed in `references/case-onboarding.md`
-  under `[script]`; do not maintain a parallel manual checklist for them.
+  not mark the case done.
 - **GATE — final acceptance:** present the running build. Wait for user to accept or list fixes.
+- **Deadlock rule:** if implementation matches intake but has a runtime bug that
+  can't be resolved without changing the requirement, STOP and ask the user.
+  Never silently change physics to make tests pass.
 
 ### Audit mode
 For an existing project: skip to step 3 (extract spec from code).
