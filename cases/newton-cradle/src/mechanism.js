@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
+import * as CANNON from 'cannon-es';
 import { createWoodFrameTexture } from './textures.js';
 import { sound } from './audio.js';
 import { SPEC } from './spec.js';
@@ -514,4 +515,209 @@ export class NewtonCradleModel {
   readout() { return []; }
   update(dt = 1 / 60) { this._applyKinematics(dt); }
   dispose() {}
+}
+
+// ============================================================================
+// Headless probe — reference implementation per
+// docs/sketch2sim-multi-agent-architecture.md §3.1 / §3.3 (G3/G4) / §2.3.5.
+//
+// `new Mechanism(world, scene, spec)` accepts null world/scene. In headless
+// mode probe() builds its own cannon-es World, assembles the real Newton's
+// cradle (n balls, radius ballR, string length L, initial touching,
+// restitution from spec), releases the end ball by pullAngleDeg, steps fixed
+// dt, and returns the §3.1 feature pack. No DOM, no THREE rendering path is
+// touched on this branch.
+//
+// Every physics constant below is derived from `spec` (or this.resolveParams);
+// never hand-copied from spec.json. Solver knobs (iterations/substeps) are
+// numerical-method settings, not physics constants.
+// ============================================================================
+
+// Tolerate both the flattened SPEC shape and the raw spec.json nested shape.
+function _normalizeSpec(spec) {
+  const s = spec || SPEC;
+  return {
+    L: s.pendulumLength ?? s.physics?.pendulumLength,
+    g: s.gravity ?? s.world?.gravity,
+    ballR: s.ballRadius ?? s.physics?.ballRadius,
+    nBalls: s.ballCount ?? s.geometry?.ballCount,
+    restitution: s.restitution ?? s.physics?.restitution,
+    airDrag: s.airDrag ?? s.physics?.airDrag,
+    densities: s.densities ?? {
+      steel: s.materials.steel.density,
+      plastic: s.materials.plastic.density,
+    },
+    pullAngleDeg: s.inputs?.[0]?.value ?? 34,
+  };
+}
+
+// Build one headless cannon-es cradle and return its bodies/constraints.
+function _buildCradle(p) {
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -p.g, 0) });
+  world.defaultContactMaterial.friction = 0.05;
+  world.defaultContactMaterial.restitution = p.restitution;
+  world.solver.iterations = 100;
+
+  const vol = (4 / 3) * Math.PI * Math.pow(p.ballR, 3);
+  const pivots = [];
+  const balls = [];
+  for (let i = 0; i < p.nBalls; i++) {
+    const xi = (i - (p.nBalls - 1) / 2) * 2 * p.ballR;
+    const pivot = new CANNON.Body({
+      mass: 0,
+      shape: new CANNON.Sphere(0.001),
+      position: new CANNON.Vec3(xi, 0, 0),
+    });
+    world.addBody(pivot);
+    const mat = p.ballMaterials?.[i] ?? 'steel';
+    const m = vol * (p.densities[mat] ?? p.densities.steel);
+    const ball = new CANNON.Body({
+      mass: m,
+      shape: new CANNON.Sphere(p.ballR),
+      position: new CANNON.Vec3(xi, -p.L, 0),
+      linearDamping: p.airDrag,
+      angularDamping: p.airDrag,
+    });
+    world.addBody(ball);
+    // Hinge: pivot at (xi,0,0), ball hung below it, axis = z (out of plane).
+    world.addConstraint(new CANNON.HingeConstraint(pivot, ball, {
+      pivotA: new CANNON.Vec3(0, 0, 0),
+      pivotB: new CANNON.Vec3(0, p.L, 0),
+      axisA: new CANNON.Vec3(0, 0, 1),
+      axisB: new CANNON.Vec3(0, 0, 1),
+      collideConnected: false,
+    }));
+    pivots.push(pivot);
+    balls.push(ball);
+  }
+  return { world, pivots, balls };
+}
+
+function _totalEnergy(balls, g) {
+  let ke = 0, pe = 0;
+  for (const b of balls) {
+    ke += 0.5 * b.mass * b.velocity.lengthSquared()
+        + 0.5 * b.inertia.x * b.angularVelocity.lengthSquared();
+    pe += b.mass * g * b.position.y;
+  }
+  return { ke, pe, e: ke + pe };
+}
+
+export class Mechanism {
+  /**
+   * @param {CANNON.World|null} world - external physics world (null = headless)
+   * @param {THREE.Group|null} scene - render scene (null = headless)
+   * @param {Object} spec - parameter source (defaults to imported SPEC)
+   */
+  constructor(world = null, scene = null, spec = null) {
+    this.world = world;
+    this.scene = scene;
+    this.spec = spec || SPEC;
+  }
+
+  resolveParams() {
+    return _normalizeSpec(this.spec);
+  }
+
+  /**
+   * Headless verification probe (§3.1).
+   * @param {Object} options - { stepCount:120, dt:1/60, perturb:null,
+   *   pullAngleDeg, ballMaterials }
+   *   perturb: multipliers, e.g. { pendulumLength: 1.1 } stretches the string
+   *   +10% (G4 anti-fake: probe outputs must drift, never return constants).
+   * @returns {Object} feature pack
+   */
+  probe(options = {}) {
+    const stepCount = options.stepCount ?? 120;
+    const dt = options.dt ?? (1 / 60);
+    const perturb = options.perturb ?? null;
+
+    const p = this.resolveParams();
+    if (options.pullAngleDeg != null) p.pullAngleDeg = options.pullAngleDeg;
+    if (options.ballMaterials) p.ballMaterials = options.ballMaterials;
+    if (perturb) {
+      if (perturb.pendulumLength) p.L *= perturb.pendulumLength;
+      if (perturb.ballRadius) p.ballR *= perturb.ballRadius;
+      if (perturb.restitution) p.restitution *= perturb.restitution;
+      if (perturb.pullAngleDeg) p.pullAngleDeg *= perturb.pullAngleDeg;
+    }
+
+    // ---- Rest-state settle check (§3.1 restStateSettled): perfect rest ----
+    // configuration, no pull; a well-posed cradle must stay at rest with no
+    // NaN and no runaway velocity over a short window.
+    const settle = _buildCradle(p);
+    for (let i = 0; i < 10; i++) settle.world.step(dt);
+    let restOk = true;
+    for (const b of settle.balls) {
+      if (!isFinite(b.velocity.length()) || b.velocity.length() > 0.05) restOk = false;
+    }
+
+    // ---- Main scenario: pull end ball, release, step fixed dt ----
+    const { world, pivots, balls } = _buildCradle(p);
+    const pullRad = p.pullAngleDeg * Math.PI / 180;
+    const b0 = balls[0];
+    b0.position.set(
+      pivots[0].position.x - p.L * Math.sin(pullRad),
+      -p.L * Math.cos(pullRad),
+      0,
+    );
+    // Orient ball so the hinge anchor lands exactly on the pivot (zero
+    // initial constraint violation).
+    b0.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), -pullRad);
+    b0.velocity.setZero();
+    b0.angularVelocity.setZero();
+
+    const contacts = [];
+    world.addEventListener('beginContact', (ev) => {
+      const ba = ev.bodyA, bb = ev.bodyB;
+      const ia = balls.indexOf(ba), ib = balls.indexOf(bb);
+      if (ia < 0 || ib < 0) return;
+      const dist = ba.position.distanceTo(bb.position);
+      const penetration = Math.max(0, 2 * p.ballR - dist);
+      contacts.push({ actor: `Ball_${ia}`, prop: `Ball_${ib}`, penetrationDepth: penetration });
+    });
+
+    const E0 = _totalEnergy(balls, p.g);
+    const x0 = balls.map((b) => b.position.x);
+    let maxSlack = 0;
+    let maxDisp = 0;
+    let farVxPeak = 0;
+    let exploded = false;
+    const SUBSTEPS = 2; // half-dt substeps keep hinge constraint slack <1%
+
+    for (let s = 0; s < stepCount; s++) {
+      for (let k = 0; k < SUBSTEPS; k++) world.step(dt / SUBSTEPS);
+      for (let i = 0; i < p.nBalls; i++) {
+        const d = pivots[i].position.distanceTo(balls[i].position);
+        maxSlack = Math.max(maxSlack, (Math.abs(d - p.L) / p.L) * 100);
+        maxDisp = Math.max(maxDisp, Math.abs(balls[i].position.x - x0[i]));
+        if (!isFinite(balls[i].position.x) || Math.abs(balls[i].position.x) > 1e3) exploded = true;
+      }
+      const far = balls[p.nBalls - 1];
+      if (far.velocity.x > farVxPeak) farVxPeak = far.velocity.x;
+    }
+
+    const E = _totalEnergy(balls, p.g);
+    let px = 0, py = 0, pz = 0;
+    for (const b of balls) {
+      px += b.mass * b.velocity.x;
+      py += b.mass * b.velocity.y;
+      pz += b.mass * b.velocity.z;
+    }
+
+    return {
+      // 1. conservation features
+      kineticEnergy: E.ke,                    // J, final-step kinetic energy
+      potentialEnergy: E.pe,                 // J, final-step potential energy (ref y=0)
+      totalEnergyDrift: ((E.e - E0.e) / Math.abs(E0.e)) * 100, // %
+      momentumVector: [px, py, pz],           // kg·m/s, final net momentum
+      // 2. mechanism-specific features
+      primaryVelocity: farVxPeak,            // m/s, far-end ball peak outward exit speed
+      restStateSettled: restOk && !exploded,  // no NaN / numerical explosion
+      maxDisplacement: maxDisp,               // m, max horizontal excursion of any ball
+      // 3. constraints & contacts
+      constraintSlack: maxSlack,              // %, max |string|-deviation of hinge
+      propCollisions: contacts,               // [{actor, prop, penetrationDepth}]
+    };
+  }
 }

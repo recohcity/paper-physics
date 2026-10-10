@@ -1,0 +1,14 @@
+{
+  "attemptCount": 1,
+  "errorFingerprint": [
+    {
+      "testId": "G2",
+      "failReason": "G2 shared template/interaction contract failed (tour naming / lighting / resetAll / panel / formula card).",
+      "sha": "e749158abd4b80d8f96306f18dd3562699e27890a3ff5caf83210b3c97f34a21",
+      "count": 1
+    }
+  ],
+  "frozen": false,
+  "specVersion": "6a05a9e9289a",
+  "state": "SELF_HEALING"
+}

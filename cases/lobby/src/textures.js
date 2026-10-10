@@ -1,3 +1,4 @@
+// 公共外壳资产，权威源为 skill/sketch2sim/template/src/textures.js；本工程为最简样例。
 import * as THREE from 'three';
 
 /**

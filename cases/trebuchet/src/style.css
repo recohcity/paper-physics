@@ -545,6 +545,12 @@ input[type="range"] {
   cursor: pointer;
 }
 
+/* Build-panel parameter sliders aligned to 90px (panel-layout-standards.md,
+   newton-cradle reference). ID selectors outrank the 100% base rule above. */
+#ball-slider, #weight-slider, #pull-slider {
+  width: 90px;
+}
+
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 14px;

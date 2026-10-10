@@ -1,4 +1,10 @@
-// 公共外壳资产，权威源为 skill/sketch2sim/template/src/audio.js；本工程为最简样例。
+// ============================================================================
+// AUTHORITATIVE PUBLIC SHELL (skill/sketch2sim/template/src/audio.js)
+// Single source of truth for synthesized Web-Audio sound effects. Body aligned
+// with cases/lobby/src/audio.js (the sample): paper slide, cannon/launch,
+// load whoosh, tilt tick, block hit, per-material hit table, mute toggle.
+// Exported singleton: `export const sound = new SoundManager()`.
+// ============================================================================
 /**
  * Synthesized audio sound effects via Web Audio API
  */

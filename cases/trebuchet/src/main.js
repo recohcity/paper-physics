@@ -1058,6 +1058,19 @@ class App {
     this.updateBallInCup();
     this.physics.resetBlocks();
 
+    // Bad-5 reset contract: zero BOTH linear and angular velocity on the live
+    // hinge bodies so no residual spin leaks between Tour ⇄ Build modes.
+    if (this.physics) {
+      if (this.physics.mechArmBody) {
+        this.physics.mechArmBody.velocity.setZero();
+        this.physics.mechArmBody.angularVelocity.setZero();
+      }
+      if (this.physics.mechCwBody) {
+        this.physics.mechCwBody.velocity.setZero();
+        this.physics.mechCwBody.angularVelocity.setZero();
+      }
+    }
+
     this.annotations.clear();
     this.statDownCount.textContent = '0';
     this.statSpeed.textContent = '— m/s';

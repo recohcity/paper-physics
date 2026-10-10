@@ -1,0 +1,14 @@
+{
+  "attemptCount": 1,
+  "errorFingerprint": [
+    {
+      "testId": "G1",
+      "failReason": "G1 traceability: assert count < numeric intake rows (hollow test, Bad-1).",
+      "sha": "fc8f2fd5793aea0dab28202bd83da96f68e7d075925cca0ba5e794415022be4c",
+      "count": 1
+    }
+  ],
+  "frozen": false,
+  "specVersion": "6a05a9e9289a",
+  "state": "SELF_HEALING"
+}

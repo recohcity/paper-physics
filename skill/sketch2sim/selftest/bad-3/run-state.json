@@ -1,0 +1,14 @@
+{
+  "attemptCount": 1,
+  "errorFingerprint": [
+    {
+      "testId": "G4",
+      "failReason": "G4 perturbation anti-fake: probe output insensitive to ±10% input (Bad-3).",
+      "sha": "c1b8ab55f6d1fffe97b80d3d670a3ef8a19cf1ca220bc1b035b6a600c50d30c8",
+      "count": 1
+    }
+  ],
+  "frozen": false,
+  "specVersion": "6a05a9e9289a",
+  "state": "SELF_HEALING"
+}

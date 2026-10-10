@@ -1,0 +1,11 @@
+{
+  "name": "selftest-base",
+  "scale": { "anchor": "1 scene unit = 1 m" },
+  "world": { "gravity": 9.81 },
+  "physics": {
+    "pendulumLength": 0.35,
+    "ballRadius": 0.025,
+    "restitution": 0.97
+  },
+  "geometry": { "ballCount": 5 }
+}
