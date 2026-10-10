@@ -97,7 +97,7 @@ class App {
     this.armVelocity = 0;
 
     // Ball load flight: the cannonball arcs from the stand into the cup along
-    // a fast parabola on every load (Fire button, rack/cup click, tour FIRE).
+    // a fast parabola on every load (Fire button, rack/cup click, tour RUN).
     this._ballFlying = false;
     this._ballFlightTween = null;
     this._ballLoadPromise = null;
@@ -430,11 +430,11 @@ class App {
   initAnnotations() {
     this.annotations = new TrajectoryAnnotations(this.annotationCanvas, this.camera);
 
-    // Physics formula card (PARTS step)
-    this._partsCard = document.createElement('div');
-    this._partsCard.id = 'parts-card';
-    this._partsCard.style.cssText = 'position:fixed;left:30px;bottom:140px;width:300px;background:linear-gradient(135deg,#f5f0e6,#e8e0d0);border:1px solid #d4c9b0;border-radius:2px;padding:18px;z-index:20;opacity:0;transition:opacity 0.5s;box-shadow:2px 4px 16px rgba(0,0,0,0.3);pointer-events:auto;';
-    this._partsCard.innerHTML = `<div style="position:absolute;top:6px;right:10px;cursor:pointer;color:#8b7355;font-size:14px;" onclick="document.getElementById('parts-card').style.opacity='0'">×</div>
+    // Physics formula card (PHYSICS step)
+    this._physicsCard = document.createElement('div');
+    this._physicsCard.id = 'physics-card';
+    this._physicsCard.style.cssText = 'position:fixed;left:30px;bottom:140px;width:300px;background:linear-gradient(135deg,#f5f0e6,#e8e0d0);border:1px solid #d4c9b0;border-radius:2px;padding:18px;z-index:20;opacity:0;transition:opacity 0.5s;box-shadow:2px 4px 16px rgba(0,0,0,0.3);pointer-events:auto;';
+    this._physicsCard.innerHTML = `<div style="position:absolute;top:6px;right:10px;cursor:pointer;color:#8b7355;font-size:14px;" onclick="document.getElementById('physics-card').style.opacity='0'">×</div>
       <div style="color:#8b7355;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">Trebuchet</div>
       <div style="color:#5a4a38;font-size:14px;font-weight:bold;margin-bottom:14px;">Physics Info</div>
       <div style="color:#3a2e20;font-size:12px;line-height:1.9;">
@@ -443,9 +443,9 @@ class App {
         <div style="margin-bottom:10px;"><div style="color:#8b7355;font-size:10px;">Projectile Trajectory</div><div style="font-family:Georgia,serif;font-style:italic;">x = v₀·cosφ·t, y = v₀·sinφ·t − ½gt²</div></div>
         <div><div style="color:#8b7355;font-size:10px;">Parameters</div><div>g = 9.82 m/s² · CW 1.4–10 kg · Ball 0.3–0.6 kg</div></div>
       </div>`;
-    document.body.appendChild(this._partsCard);
+    document.body.appendChild(this._physicsCard);
     // Click title/tag to show card for 5s.
-    const showCard = () => { this._partsCard.style.opacity = '1'; clearTimeout(this._partsCardT); this._partsCardT = setTimeout(() => this._partsCard.style.opacity = '0', 5000); };
+    const showCard = () => { this._physicsCard.style.opacity = '1'; clearTimeout(this._physicsCardT); this._physicsCardT = setTimeout(() => this._physicsCard.style.opacity = '0', 5000); };
     document.getElementById('brand-title')?.addEventListener('click', showCard);
     document.getElementById('brand-tag')?.addEventListener('click', showCard);
     this.annotations.setWeight(this.counterweightKg, this.trebuchet.getCounterweightWorldPosition());
@@ -676,7 +676,7 @@ class App {
         })
         .onComplete(() => {
           // The flight flag stays set through the seating hand-off: the caller
-          // (loadBall / tour FIRE step) clears it only after it has seated the
+          // (loadBall / tour RUN step) clears it only after it has seated the
           // ball in the cup.  If we cleared it here, the same RAF tick's
           // per-frame updateBallInCup() would see ballLoaded still false and
           // pin the ball back to the rack for one rendered frame (the "ghost
@@ -782,7 +782,7 @@ class App {
     // previous shot's ball may still rest among the blocks (finishShot left it
     // in the world — waking the pile with the stale body there shoves the
     // blocks before the new launch).  When the ball was just loaded fresh
-    // (tour FIRE step, or a build Fire that just loadBall()'d) the stale flag
+    // (tour RUN step, or a build Fire that just loadBall()'d) the stale flag
     // is clear and we keep the ball exactly where it is, so the launch works.
     if (this._staleBall) {
       this.physics.removeProjectile(this.scene);
@@ -949,7 +949,7 @@ class App {
     // The shot's ball stays in the world after landing (build mode re-seats it
     // 1.5 s later).  Flag it so the NEXT fire() knows a stale body may be
     // resting among the blocks and rebuilds the projectile before waking the
-    // pile.  The tour's FIRE step fires a freshly-loaded ball (no finishShot
+    // pile.  The tour's RUN step fires a freshly-loaded ball (no finishShot
     // before it) so it keeps the ball untouched.
     this._staleBall = true;
     // Safety: if the shot ended before release (e.g. counterweight too light),
@@ -986,7 +986,7 @@ class App {
     // After the shot settles, reset arm to rest and put a fresh ball back on
     // the stand — the next throw requires loading the ball again (ball-stand
     // flow).  Build mode only: during the tour the ball must stay in the world
-    // (FIRE -> REPLAY slow-mo rerun -> 3 s reset at REPLAY end, aligned with
+    // (RUN -> REPLAY slow-mo rerun -> 3 s reset at REPLAY end, aligned with
     // fire's build reset), so the tour path resets in the REPLAY/BUILD steps.
     if (!this.isTourRunning) {
       setTimeout(() => {
@@ -1157,7 +1157,7 @@ class App {
     }
   }
 
-  // Guided Tour sequence — 9 steps.  playTourFrom(startStep) lets the
+  // Guided Tour sequence — 8 steps.  playTourFrom(startStep) lets the
   // scrubber seek to any step: it lands on that step's start state, then
   // replays from there to the end.
   tourSetup() {
@@ -1266,19 +1266,19 @@ class App {
       this.applyMorphToExtras(1.0);
       this.setCameraView('Hero', 0);
       this.physics.ballReleased = false;
-      this.ballLoaded = false; // ball sits on the stand until FIRE loads it
+      this.ballLoaded = false; // ball sits on the stand until RUN loads it
       this.setPullAngle(0);
       if (this.physics.ballMesh) this.physics.ballMesh.visible = true;
       this.updateBallInCup();
     }
-    if (i >= 5) { // step 5 (PARTS): physics card, no part labels
+    if (i >= 5) { // step 5 (PHYSICS): physics formula card, no part labels
       this.annotations.setPartLabels(null, 0);
     }
-    if (i >= 6) { // step 6 (FIRE) start: ball in cup, labels off
+    if (i >= 6) { // step 6 (RUN) start: ball in cup, labels off
       this.annotations.setPartLabels(null, 0);
       this.physics.resetBlocks();
       this.physics.ballReleased = false;
-      this.ballLoaded = true; // loaded by the FIRE step
+      this.ballLoaded = true; // loaded by the RUN step
       this.setPullAngle(0);
       this.updateBallInCup();
     }
@@ -1311,8 +1311,8 @@ class App {
   }
 
   // Drive the sketch->model stages exactly like tour steps 1-4:
-  // 0 READ (blueprint only) / 0-33 LIFT (2D cutouts stand up, 3D hidden) /
-  // 33-66 MODEL (cutouts fade, white 3D model) / 66-100 WOOD (full material).
+  // 0 SKETCH (blueprint only) / 0-33 LIFT (2D cutouts stand up, 3D hidden) /
+  // 33-66 MODEL (cutouts fade, white 3D model) / 66-100 MATERIAL (full material).
   applyMorphToStage(v) {
     const t = this.trebuchet;
     const ph = this.physics;
@@ -1429,7 +1429,7 @@ class App {
       bm.forEach((m) => { if (m && m.getWorldPosition) { m.getWorldPosition(tmp); acc.add(tmp); k++; } });
       if (k) blocksV = acc.divideScalar(k);
     }
-    // Ball anchor: while the tour shows PARTS the ball still sits on the stand
+    // Ball anchor: while the tour shows PHYSICS the ball still sits on the stand
     // (lower-left), so point at the ball itself (physics.ballMesh).
     const ballPos = this.physics && this.physics.ballMesh
       ? wp(this.physics.ballMesh)
@@ -1534,7 +1534,7 @@ class App {
         this.environment.hidePaperSketch();
         if (this.environment.pencilGroup) this.environment.pencilGroup.visible = false;
         if (this.environment.eraserGroup) this.environment.eraserGroup.visible = false;
-        this.showTourBanner('2/8 SKETCH outline highlights, then lifts off as 2D cutouts');
+        this.showTourBanner('2/8 LIFT — outline highlights lift off the paper as 2D cutouts');
         this.updateScrubber(0.19, '00:16');
         if (this.trebuchet.ropeMesh) this.trebuchet.ropeMesh.visible = false;
         if (this.ballStand) this.ballStand.visible = false;
@@ -1579,7 +1579,7 @@ class App {
       // Step 3: 2D纸片 -> 3D白模型（morph 0 -> 0.66）
       // -----------------------------------------------------------------
       if (startStep <= 2 && (singleStep === null || singleStep === 2)) {
-        this.showTourBanner('3/8 2D cutouts unfold into a 3D white model');
+        this.showTourBanner('3/8 MODEL — 2D cutouts unfold into a 3D white model');
         this.updateScrubber(0.38, '00:32');
         this.highlightTourStep(2);
         this.setCameraView('Hero', 1800);
@@ -1650,23 +1650,23 @@ class App {
       }
 
       // -----------------------------------------------------------------
-      // Step 5: 渐进式显示每个主要部件名称（点线+文字）
+      // Step 5 (PHYSICS): 物理公式卡片（解释支配方程，非零件标注）
       // -----------------------------------------------------------------
       if (startStep <= 4 && (singleStep === null || singleStep === 4)) {
-        this.showTourBanner('5/8 Physics — key equations for the trebuchet');
+        this.showTourBanner('5/8 PHYSICS — key equations for the trebuchet');
         this.updateScrubber(0.65, '00:55');
         this.highlightTourStep(4);
-        this._partsCard.style.opacity = '1';
+        this._physicsCard.style.opacity = '1';
         await sleep(2500);
-        this._partsCard.style.opacity = '0';
+        this._physicsCard.style.opacity = '0';
       }
 
       // -----------------------------------------------------------------
-      // Step 6 (index 5): 先示意，然后执行拖拽摆杆完成发射
+      // Step 6 (index 5, RUN): 先示意，然后执行拖拽摆杆完成发射
       // (LOAD was removed: the ball flies into the cup here as a short intro)
       // -----------------------------------------------------------------
       if (startStep <= 5 && (singleStep === null || singleStep === 5)) {
-        this.showTourBanner('6/8 Hold the cup, pull down, let go — fire!');
+        this.showTourBanner('6/8 RUN — hold the cup, pull down, let go — fire!');
         this.updateScrubber(0.78, '01:06');
         this.highlightTourStep(5);
         this.annotations.setPartLabels(null, 0);
@@ -1691,14 +1691,14 @@ class App {
         await sleep(300);
         await this.fire();
         // 2 s after fire the replay step takes over (user directive:
-        // "改2秒后进入replay").  If FIRE's shot is still live (ball bounced
+        // "改2秒后进入replay").  If RUN's shot is still live (ball bounced
         // off the tower and hasn't "landed"), REPLAY force-finishes it before
         // its own fire(), so this is always a clean 2 s hand-off.
         await sleep(2000);
       }
 
       // -----------------------------------------------------------------
-      // Step 8 (index 7): 慢镜回放刚才的发射
+      // Step 7 (index 6): 慢镜回放刚才的发射
       // -----------------------------------------------------------------
       if (startStep <= 6 && (singleStep === null || singleStep === 6)) {
         this.showTourBanner('7/8 Slow-motion replay at quarter speed (0.25×)');
@@ -1707,7 +1707,7 @@ class App {
         // Re-seat the ball into the cup BEFORE waking the pile: the previous
         // shot's ball still rests among the blocks and would shove them the
         // moment they wake ("invisible impact" in the replay too).
-        // FIRE's shot may still be live (tower-bounce keeps y above the landing
+        // RUN's shot may still be live (tower-bounce keeps y above the landing
         // threshold): force-finish it so REPLAY's fire() starts from a clean
         // mechanism state.  Ball stays in the world (tour path never
         // auto-returns it mid-replay).
@@ -1718,7 +1718,7 @@ class App {
           this.finishShot(rd);
         }
         this.physics.ballReleased = false;
-        this.ballLoaded = true; // the FIRE shot's ball rests in the world — seat it
+        this.ballLoaded = true; // the RUN shot's ball rests in the world — seat it
         this.updateBallInCup();
         this.physics.resetBlocks();
         this.physics.wakeBlocks();
@@ -1726,7 +1726,7 @@ class App {
 
         // Aligned with build Fire (user directive 2026-09-30): fire() applies
         // MAX_PULL_DEG=135 and the current panel counterweight by itself.
-        // FIRE left pullDeg=135, which would make fire() skip the re-cock and
+        // RUN left pullDeg=135, which would make fire() skip the re-cock and
         // release from REST at omega~0 (replay instantly settles) — reset it
         // so the replay launches the full pull.
         // The slow-mo replay must show the flight path (user 2026-10-01):
@@ -1770,7 +1770,7 @@ class App {
       }
 
       // -----------------------------------------------------------------
-      // Step 9 (index 8): 切到 build it yourself
+      // Step 8 (index 7): 切到 build it yourself
       // -----------------------------------------------------------------
       if (startStep <= 7 && (singleStep === null || singleStep === 7)) {
         this.showTourBanner('8/8 Tour complete — now build it yourself');
@@ -2005,7 +2005,7 @@ class App {
     });
 
     // Morph slider (Sketch to Model) — stages aligned to tour steps 1-4:
-    // READ(0) -> LIFT(33, 2D cutouts stand up) -> MODEL(66, white 3D) -> WOOD(100, material)
+    // SKETCH(0) -> LIFT(33, 2D cutouts stand up) -> MODEL(66, white 3D) -> MATERIAL(100, material)
     this.morphSlider.addEventListener('input', (e) => {
       const v = parseInt(e.target.value);
       this.applyMorphToStage(v);

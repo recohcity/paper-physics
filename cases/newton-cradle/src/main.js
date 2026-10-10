@@ -369,7 +369,7 @@ class App {
       m.modelBuilt,          // 2 MODEL — only after white 3D loads
       m.modelBuilt,          // 3 MATERIAL — model exists, ready to assign materials
       m.interactiveReady,    // 4 PHYSICS
-      m.interactiveReady,    // 5 PLAY
+      m.interactiveReady,    // 5 RUN
       m.interactiveReady,    // 6 REPLAY
       m.interactiveReady,    // 7 BUILD
     ];
@@ -516,7 +516,7 @@ class App {
     // Update sketch2sim badge + slider
     const badge = document.getElementById('morph-stage');
     if (badge) {
-      const names = ['SKETCH','LIFT','MODEL','MATERIAL','PHYSICS','PLAY','REPLAY','BUILD'];
+      const names = ['SKETCH','LIFT','MODEL','MATERIAL','PHYSICS','RUN','REPLAY','BUILD'];
       badge.textContent = names[i] || '';
     }
     if (this.morphSlider) this.morphSlider.value = Math.round((i / 7) * 100);
@@ -712,16 +712,16 @@ class App {
         await sleep(300);
       }
 
-      // Step 4 — PHYSICS: static arrangement + explanation card (stays through PLAY/REPLAY).
+      // Step 4 — PHYSICS: static arrangement + explanation card (stays through RUN/REPLAY).
       if (avail[4] && startStep <= 4 && (singleStep === null || singleStep === 4)) {
         this.showTourBanner('Physics: equal-mass elastic collision swaps velocity. V-ropes constrain to 2D plane.');
         this.mechanism.reset();
         this.showPhysicsCard(0); // persistent until build
       }
 
-      // Step 5 — PLAY: Ball_0 pulled left, released, full round-trip, then resets.
+      // Step 5 — RUN: Ball_0 pulled left, released, full round-trip, then resets.
       if (avail[5] && startStep <= 5 && (singleStep === null || singleStep === 5)) {
-        this.showTourBanner('PLAY: Ball_0 swings left, hits. Wave travels right, Ball_4 pops. Ball_4 rebounds, hits back, Ball_0 pops. Then settles to rest.');
+        this.showTourBanner('RUN: Ball_0 swings left, hits. Wave travels right, Ball_4 pops. Ball_4 rebounds, hits back, Ball_0 pops. Then settles to rest.');
         this.setCameraView('Hero', 800);
         await sleep(1000);
         this.mechanism.resetAll();

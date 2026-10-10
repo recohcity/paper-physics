@@ -235,13 +235,13 @@ transforming from the drawing.
 with the cutout's bottom edge resting on the same table height. Verify the cutout and model overlap
 on screen before approving the transition.
 
-## 30. PARTS should show physics formulas, not part names
+## 30. PHYSICS step shows physics formulas, not part names
 
 Labeling parts ("this is the beam", "this is a ball") adds no value — the user can already see them.
 The educational value is the physics: pendulum equation, momentum conservation, energy exchange.
-**Rule:** PARTS step shows a paper-style card (not floating labels) listing the governing equations
+**Rule:** PHYSICS step shows a paper-style card (not floating labels) listing the governing equations
 for this mechanism. The card is dismissible (×), selectable (user can copy formulas), and toggled
-by clicking the project title. Card persists through PLAY/REPLAY, hides on BUILD.
+by clicking the project title. Card persists through RUN/REPLAY, hides on BUILD.
 
 ## 31. Free-orbit view is a toggle switch, not a view button
 

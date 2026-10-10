@@ -155,8 +155,8 @@ must answer *why the mechanism moves*.)
 - **Triggers.**
   - Clicking the **PHYSICS** stage button shows the card (and hides it again when
     another stage takes over).
-  - During auto-play the card is on screen **between the PHYSICS step and the PLAY
-    / RUN step**; it must disappear as soon as the mechanism starts moving.
+  - During auto-play the card is on screen **between the PHYSICS step and the RUN
+    step**; it must disappear as soon as the mechanism starts moving.
   - Entering **BUILD** mode always hides the card — build mode is for tweaking, not
     for reading theory.
   - Clicking the **project title** in the title block (with its small `ⓘ` / info
@@ -184,7 +184,7 @@ must answer *why the mechanism moves*.)
 
 Acceptance: open PHYSICS, the card appears with the right formulas; select a formula
 with the mouse and copy it to the clipboard; press × to dismiss; let auto-play run
-and confirm the card is visible at the PHYSICS→PLAY boundary and gone once the model
+and confirm the card is visible at the PHYSICS→RUN boundary and gone once the model
 starts moving; click the title and confirm the card reappears and fades out ~5 s later.
 
 ## 4. Mechanism interface (the 20% new code)
@@ -253,7 +253,7 @@ new stage order.
 | 1 | **LIFT** | **Side** (cutout stands up) | Sketch outline fades in as a 2D cutout lying flat on the paper, then rotates `-PI/2 → 0` to stand up vertical. | A `PlaneGeometry` mesh whose material is the sketch cutout (white bg removed, transparent). Starts flat on paper, stands up. |
 | 2 | **MODEL** | **Hero** | 2D cutout fades out; white (untextured) 3D model morphs in. | The 3D group with all meshes in white/gray material. `visible=false` until this step. |
 | 3 | **MATERIAL** (was WOOD) | **Hero** | White model gets its real materials (metal/wood/plastic). | Material swap: white `MeshStandardMaterial` → textured. |
-| 4 | **PARTS** | **Hero** | Component labels / annotations fade in pointing at key parts. | Annotation sprites/lines anchored to part world positions. |
+| 4 | **PHYSICS** (was PARTS) | **Hero** | Paper-style physics card (not floating labels) explaining the governing equations. | Dismissible paper card (×, selectable), shown between PHYSICS and RUN, hides on BUILD. |
 | 5 | **RUN** (was FIRE / PLAY) | **Hero** (camera follows motion) | The mechanism runs its canonical demo motion automatically. | The physics/animation sequence; camera follows. |
 | 6 | **REPLAY** | **Hero** | Slow-motion (0.25×) replay of the run. | Same animation with timeScale=0.25. |
 | 7 | **BUILD** | model's default interaction view | Switch to build mode: user can drag/adjust parameters. | Interactive drag handlers + parameter panel. |
@@ -263,13 +263,30 @@ BUILD's resting view is the one the model's interaction was tuned for (e.g.
 Newton's Cradle = Side, Paper Trebuchet = Hero). The user may still orbit
 manually at any time; these are just the camera presets each stage auto-dials in.
 
+### Stage-name convention (read before touching tour code)
+
+The eight tour stage names are a fixed contract:
+**SKETCH → LIFT → MODEL → MATERIAL → PHYSICS → RUN → REPLAY → BUILD.**
+
+- **"PLAY" means a media control, never a stage.** `btn-play-tour`,
+  `scrubber-play`, the "Play the tour" button, `playTour()` / `toggleTourPlay()`
+  are playback controls that *drive* the tour; they are not the RUN stage and
+  must not be read as one.
+- **"FIRE" / `fire()` means the build-mode launch button only.** The tour's
+  launch stage is RUN.
+- **Historical stage names** (READ, WOOD, PARTS, FIRE, PLAY-as-stage) may appear
+  ONLY inside "(was X)" annotations and in CHANGELOG history. Never use them in
+  new code, new UI labels, or new docs.
+- **The source of truth for stage names is `index.html`'s `.tour-step` buttons.**
+  If code, docs and the buttons disagree, the buttons win.
+
 ### Tour step symmetry
 
 The tour is a deterministic forward sequence. Every step's *start state* must equal
 the previous step's *end state*, and seeking to a step must replay that sequence —
 never jump straight to a step's visual.
 
-- **Forward play order:** SKETCH → LIFT → MODEL → MATERIAL → PARTS → RUN → REPLAY
+- **Forward play order:** SKETCH → LIFT → MODEL → MATERIAL → PHYSICS → RUN → REPLAY
   → BUILD. When the user presses Play, the shell drives each step in order and waits
   for that step's own animation to finish before advancing.
 - **Seeking (`seekTourStep(i)`).** Clicking a stage button to jump to step `i`
@@ -370,9 +387,9 @@ Trigger: user uploads a sketch image + @sketch2sim.
    - **LIFT**: paper sketch disappears; irregular cutout along pencil outline rises IN PLACE about its own bottom edge (pivot = bottom, not center). Bottom edge coincides with sketch bottom.
    - **MODEL**: 2D cutout becomes white 3D model. OFFER TWO PATHS: (a) three.js inline primitives, (b) Blender headless Python export glb. After model appears, HALT and wait for user confirmation.
    - **MATERIAL** (was WOOD): materials + lighting. After done, HALT for user confirmation.
-   - PARTS / PLAY (was FIRE) / REPLAY: deferred.
+   - PHYSICS / RUN (was FIRE / PLAY) / REPLAY: deferred.
 4. **Build mode** — switch to build mode and deepen interaction FIRST. Ask user which parameters the side panel should expose (sliders, buttons, material swaps). Only build what user confirms.
-5. Only after build-mode interaction is accepted, circle back to fill PARTS / PLAY / REPLAY in the tour.
+5. Only after build-mode interaction is accepted, circle back to fill PHYSICS / RUN / REPLAY in the tour.
 
 Hard rules learned:
 - Shell (desk/paper/pencil/eraser/lights/camera/panel) is 100% copied from reference build; never reinvent.

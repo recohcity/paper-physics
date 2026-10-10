@@ -52,7 +52,7 @@
 .switch input:checked + .slider { background: #c8a878; opacity: 1; }
 .switch input:checked + .slider:before { transform: translateX(16px); }
 
-#parts-card, #parts-card * {
+#physics-card, #physics-card * {
   user-select: text !important;
   -webkit-user-select: text !important;
 }
@@ -196,7 +196,7 @@ body {
   line-height: 1.1;
 }
 
-/* Play / Build side by side under the brand name */
+/* Play the tour / Build side by side under the brand name */
 .nav-buttons {
   display: flex;
   flex-direction: row;
@@ -306,7 +306,7 @@ body {
   height: 34px;
 }
 
-/* Play / Build equal, side by side */
+/* Play the tour / Build equal, side by side */
 .view-buttons .view-btn {
   flex: 1 1 0;
   min-width: 0;

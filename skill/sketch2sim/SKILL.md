@@ -74,11 +74,18 @@ fake build.
     - Must show: pendulum/dynamics equation, collision formula, constraint type, restitution/damping values.
     - If the build supports per-object material/mass switching, the card must show the general (mass-weighted)
       formula, not just the equal-mass simplification. List material densities.
-    - **Tour lifecycle:** card appears at step PHYSICS and stays visible through PLAY and REPLAY — do NOT
+    - **Tour lifecycle:** card appears at step PHYSICS and stays visible through RUN and REPLAY — do NOT
       auto-hide when advancing to the next step. Hide it only when entering BUILD mode (step 7) or when the
       user closes it via ×. No `await sleep()` on the card itself; the tour flow proceeds immediately.
     - **On-demand click:** clicking the title or "Physics Info" tag shows the card for 5s then auto-hides.
     - Text must be selectable (`user-select:text`), not decorative.
+12. **Tour stage names are a fixed contract.** The eight stages are SKETCH / LIFT /
+    MODEL / MATERIAL / PHYSICS / RUN / REPLAY / BUILD — use exactly these in UI,
+    code and docs. **"PLAY" refers only to media controls** (the "Play the tour"
+    button, scrubber play/pause); **"FIRE" / `fire()` refers only to the
+    build-mode launch**. Historical names (READ / WOOD / PARTS / FIRE /
+    PLAY-as-stage) appear only in "(was X)" annotations. See project-delivery.md
+    "Stage-name convention".
 
 ## Decision ownership (who decides what)
 

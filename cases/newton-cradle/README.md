@@ -42,7 +42,7 @@ Interactive 3D Newton's cradle — momentum transfer, unequal-mass collision, bi
 - L/R 角度独立滑块（5°–60°），Sync 联动
 - **1 ball**：两端各拉 1 球，同时释放对撞
 - **2 balls**：两端各拉 2 球，同时释放对撞
-- **Play**：单球撞击演示（同 tour PLAY）
+- **Play**：单球撞击演示（同 tour RUN）
 - **Slow**：0.25× 慢动作
 
 ### 音效
@@ -50,4 +50,4 @@ Interactive 3D Newton's cradle — momentum transfer, unequal-mass collision, bi
 - 含塑料球：闷响 sine 低频（90→40Hz），无高频
 
 ## 原理卡片
-Tour PHYSICS 步骤自动显示，贯穿 PLAY/REPLAY，进 BUILD 时隐藏。点击标题可重新查看 5 秒。内容包含：摆锤方程、质量加权碰撞公式、V 绳约束、材质密度、恢复系数。
+Tour PHYSICS 步骤自动显示，贯穿 RUN/REPLAY，进 BUILD 时隐藏。点击标题可重新查看 5 秒。内容包含：摆锤方程、质量加权碰撞公式、V 绳约束、材质密度、恢复系数。

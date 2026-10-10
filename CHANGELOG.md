@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] — Tour stage naming unified: PHYSICS + RUN + disambiguation (2026-10-10)
+
+### PARTS → PHYSICS alignment
+- trebuchet `src/main.js`: `#parts-card` → `#physics-card`, `_partsCard`/`_partsCardT` vars, 4 comment sites, step-number comments renumbered (9 → 8 steps), morph comments READ/WOOD → SKETCH/MATERIAL, banner stage names
+- Both `style.css`: `#parts-card` selector → `#physics-card` (trebuchet live style, newton-cradle was dead code)
+- Skill docs: `project-delivery.md` stage table + forward play order + build order guide; `physics-pitfalls.md` #30
+
+### PLAY → RUN (tour stage)
+- Both `index.html`: `data-step="5"` tour button PLAY → RUN (UI label)
+- newton-cradle `src/main.js`: `names` array, gating comment, Step 5 comment + tour banner
+- trebuchet `src/main.js`: 14 tour-context FIRE → RUN comments + Step 6 banner; build-mode `fire()` / Fire button kept
+- Skill docs: `SKILL.md` physics-card lifecycle, `visual-standards.md` lifecycle + camera stage list, `physics-pitfalls.md` #30, `project-delivery.md` trigger boundary + build order guide; newton-cradle README ×2
+
+### Disambiguation (PLAY = media control, never a stage)
+- `project-delivery.md`: new "Stage-name convention" section — 8 fixed stage names (SKETCH→LIFT→MODEL→MATERIAL→PHYSICS→RUN→REPLAY→BUILD); PLAY only means playback controls (`btn-play-tour` / `scrubber-play` / "Play the tour"); FIRE/`fire()` only the build-mode launch; historical names only inside "(was X)" annotations; `.tour-step` buttons are the source of truth
+- `SKILL.md`: Non-negotiable principle #12 with the same contract, pointing to project-delivery
+- Both `style.css`: `/* Play / Build */` comments → `/* Play the tour / Build */`
+
+### Verified
+- `audit-case.mjs`: trebuchet 0 failure 0 warning; newton-cradle 0 failure (4 pre-existing warnings)
+- Both `test/verify.mjs` PASS; both `npm run build` success
+
 ## [0.7.0] — Sketch normalization + standardized build panel template (2026-10-07)
 
 ### Sketch normalization workflow

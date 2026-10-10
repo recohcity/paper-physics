@@ -76,7 +76,7 @@ The tour is purely visual — the user watches the model transform, no reading r
 - Content: governing equations written for **user-adjustable parameters**, not academic symbols.
   Bad: `I₀·θ̈ = T₁·sinα·L₂ − ...` (nobody knows T₁/T₂).
   Good: `v_cup = ω × L = 4 × v_cw`, `m_c·g·Δh → ½·I·ω²`.
-- Lifecycle: appears at PHYSICS step, stays through PLAY/REPLAY, hides on BUILD.
+- Lifecycle: appears at PHYSICS step, stays through RUN/REPLAY, hides on BUILD.
 - On-demand: click title or "Physics Info" tag → show 5s.
 - Text must be selectable (`user-select: text`).
 
@@ -86,7 +86,7 @@ Never hardcode camera distances per case. Two fit modes:
 
 - **SKETCH/LIFT (no model yet):** fit the paper area with desk visible.
   Fallback: `getFitDistance(2.5, 1.5)`.
-- **MODEL/MATERIAL/PLAY/REPLAY/BUILD:** fit the model's union bounding box
+- **MODEL/MATERIAL/RUN/REPLAY/BUILD:** fit the model's union bounding box
   (mechanism + props + blocks + stand). Not the paper — model fills the frame.
 
 ```js
