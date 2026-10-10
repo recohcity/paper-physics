@@ -17,7 +17,26 @@
       <button class="tour-step">BUILD</button>
     </nav>
     <div id="physics-card" class="card" style="opacity:0">v = sqrt(2 g L (1-cos t))</div>
-    <input class="slider" type="range" />
+
+    <!-- Build panel: minimal valid card-column structure (G2 panel-layout gate).
+         Mirrors newton-cradle / trebuchet shape: container.hidden >=2 .panel-section
+         cards, a .ctrl-group top block (label + range) and a .panel-footer bottom
+         block (Reset + sound). 90px slider width comes from style.css .slider. -->
+    <div id="build-panel" class="build-panel hidden">
+      <div class="panel-section">
+        <div class="ctrl-group">
+          <div class="ctrl-label-row"><label>PARAM</label></div>
+          <input class="slider" type="range" />
+        </div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-footer">
+          <button class="action-btn" id="btn-reset">Reset</button>
+          <button class="action-btn" id="panel-sound-btn" title="Toggle Sound">Snd</button>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

@@ -121,3 +121,27 @@ button:active { transform: translateY(1px); }
 ```
 
 This goes at the end of style.css as a global fallback — covers every button (nav, view, tour-step, material numbers, slider, speaker, reset) without per-class maintenance. Reset button uses warm tan `#c9b896`.
+
+## 8. Machine gate vs. human review (G2 panel-layout, architecture §3.2)
+
+The panel is **not** judged by a post-delivery visual sign-off. Two former
+manual items are now deterministic machine gates in `run-gates.mjs` G2:
+
+- **Overexposure** — covered by the lighting baseline gate (3-point rig
+  `0xffeed9/0.95`, `0xfffaec/2.3`, `0xdce7f6/0.6` + `#2e251d` desk + `0xd9b98c`
+  wood tint). No human "tone mapping exposure" check needed.
+- **Panel shape** — covered by a DOM-structure gate, NOT by a vague "≤ 2 rows"
+  rule. It requires: `#build-panel.build-panel.hidden` container → ≥ 2
+  `.panel-section` cards (card column) → each card's top block
+  `.ctrl-group > .ctrl-label-row > <label>` + `<input type="range">` → bottom
+  block `.panel-footer` with Reset + sound buttons → sliders aligned to
+  `width:90px`. A failure names the exact missing layer.
+
+**When a human IS asked (development time, not delivery time):** the template
+gives a solid extension base but does not enumerate every possible card layout.
+During T2, Agent-Shell implements the panel by copying the shape proven in
+`newton-cradle` / `trebuchet`. If a genuine layout disagreement arises (a control
+that does not fit any existing card, or two reasonable card splits), Coordinator
+escalates to the user **mid-T2 for feedback** — never after the gates go green
+and the case is presented for delivery. Update `docs/interaction-nodes.md` card
+map first, then the HTML.

@@ -46,7 +46,6 @@ const PASS = (g, d) => report('PASS', g, d);
 const FAIL = (g, d) => report('FAIL', g, d);
 const WARN = (g, d) => report('WARN', g, d);
 const SKIP = (g, d) => report('SKIP', g, d);
-const MANUAL = (g, d) => report('MANUAL', g, d);
 
 // ---------------------------------------------------------------------------
 // CLI args.
@@ -458,13 +457,81 @@ const g2 = (ok, detail) => { ok ? PASS('G2', detail) : (FAIL('G2', detail), (g2F
 })();
 
 (function g2panel() {
-  // Panel slider width aligned to 90px (newton-cradle reference). Detected in
-  // index.html inline styles / style.css / main.js.
+  // Panel layout — machine-checked DOM structure (architecture §3.2 G2).
+  // Replaces the retired visual "≤2 rows" / "no overexposure" MANUAL items:
+  // overexposure is already machine-guaranteed by g2lighting (3-point rig),
+  // and the panel is now judged by its DOM hierarchy, not by a pixel look.
+  //
+  // Target structure (defined by reference cases newton-cradle & trebuchet):
+  //   #build-panel.build-panel.hidden            Layer A: container, starts hidden
+  //     └─ >=2 .panel-section cards              Layer B: card-per-responsibility column
+  //          └─ top block: .ctrl-group > .ctrl-label-row > <label> + <input type=range>
+  //          └─ bottom block: .panel-footer > Reset + sound .action-btn
+  //   sliders globally aligned to width:90px   Layer E (kept from old check)
+  //
+  // Pure string / DOM-shape inspection — no pixel diff, no jsdom (this script
+  // is dependency-free). Each missing layer is reported separately so a failed
+  // run names exactly which panel block is absent.
   const html = readSafe('index.html') || '';
   const css = readSafe('src/style.css') || '';
-  const main = readSafe('src/main.js') || '';
-  const hit = /width\s*:\s*90px/.test(html) || /width\s*:\s*90px/.test(css) || /width\s*:\s*90px/.test(main);
-  g2(hit, hit ? 'panel sliders aligned to 90px' : 'no 90px slider width found in index.html / style.css / main.js');
+  const problems = [];
+
+  // Layer A — container. (Quotes delimit the id; do NOT wrap it in \b — a
+  // trailing \b after `"` fails because `"` and the following space are both
+  // non-word characters.)
+  const openM = html.match(/<div[^>]*id="build-panel"[^>]*>/);
+  if (!openM) {
+    g2(false, 'panel layout: #build-panel container missing from index.html (Layer A)');
+    return;
+  }
+  const openTag = openM[0];
+  if (!/\bclass="[^"]*\bbuild-panel\b/.test(openTag)) problems.push('Layer A: #build-panel lacks build-panel class');
+  if (!/\bclass="[^"]*\bhidden\b/.test(openTag)) problems.push('Layer A: #build-panel does not start hidden (must carry .hidden)');
+
+  // Scope all structural counts to the build-panel inner region via <div> depth
+  // matching, so class names outside the panel (nav, zoom, scrubber) cannot false-pass.
+  let region = null;
+  {
+    let i = openM.index + openTag.length;
+    let depth = 1;
+    const re = /<div\b|<\/div>/g;
+    re.lastIndex = i;
+    let mm;
+    while ((mm = re.exec(html)) !== null) {
+      if (mm[0] === '</div>') depth--; else depth++;
+      if (depth === 0) { region = html.slice(openM.index, mm.index); break; }
+    }
+  }
+  if (region == null) problems.push('Layer A: #build-panel <div> structure unbalanced (cannot parse)');
+  const R = region || '';
+
+  // Layer B — card column (card-per-responsibility).
+  const cardCount = (R.match(/class="[^"]*\bpanel-section\b/g) || []).length;
+  if (cardCount < 2) problems.push(`Layer B: only ${cardCount} .panel-section card(s) inside panel (need >=2 card-per-responsibility column)`);
+
+  // Layer C — card top block: small-title label row + range slider.
+  const ctrlGroups = (R.match(/class="[^"]*\bctrl-group\b/g) || []).length;
+  const labelRows = (R.match(/class="[^"]*\bctrl-label-row\b/g) || []).length;
+  const hasLabel = /class="[^"]*\bctrl-label-row\b[^"]*"[^>]*>[\s\S]*?<label[\s>]/i.test(R);
+  const sliders = (R.match(/<input[^>]*type="range"/g) || []).length;
+  if (ctrlGroups < 1) problems.push('Layer C: no .ctrl-group (label+slider group) inside panel');
+  if (labelRows < 1) problems.push('Layer C: no .ctrl-label-row small-title row');
+  if (!hasLabel) problems.push('Layer C: .ctrl-label-row carries no <label> small title');
+  if (sliders < 1) problems.push('Layer C: no <input type="range"> slider inside panel');
+
+  // Layer D — card bottom block: global button baseline (Reset + sound).
+  if (!/\bpanel-footer\b/.test(R)) problems.push('Layer D: no .panel-footer button row');
+  if (!/id="btn-reset"|>Reset</i.test(R)) problems.push('Layer D: no Reset button (id="btn-reset")');
+  if (!/id="panel-sound-btn"|title="Toggle Sound"/.test(R)) problems.push('Layer D: no sound toggle button (id="panel-sound-btn")');
+
+  // Layer E — global slider width alignment 90px (kept from the old check).
+  if (!/width\s*:\s*90px/.test(html) && !/width\s*:\s*90px/.test(css)) {
+    problems.push('Layer E: sliders not globally aligned to width:90px (missing in index.html/style.css)');
+  }
+
+  g2(problems.length === 0, problems.length === 0
+    ? `panel layout structural contract OK: #build-panel.hidden > ${cardCount} .panel-section cards, ${ctrlGroups} .ctrl-group top block(s) (label+slider), .panel-footer (reset+sound), sliders 90px`
+    : `panel layout structural mismatch: ${problems.join('; ')}`);
 })();
 
 (function g2formulaCard() {
@@ -480,9 +547,11 @@ const g2 = (ok, detail) => { ok ? PASS('G2', detail) : (FAIL('G2', detail), (g2F
     : `formula card contract incomplete (exists=${existsCard}, lights@PHYSICS=${lightsAtPhysics}, hidden@BUILD=${hiddenInBuild})`);
 })();
 
-// Manual-only visual items — printed into the delivery checklist, never FAIL.
-MANUAL('G2', '[仅人工验收] 无光晕过曝 / tone mapping exposure sanity (visual).');
-MANUAL('G2', '[仅人工验收] 面板卡片排版不超过 2 行 (visual).');
+// Both former "manual-only visual" items are now machine gates:
+//   * overexposure  -> g2lighting (3-point rig + desk + tint), above.
+//   * panel layout  -> g2panel (DOM structure: container + card column + per-card
+//     top/bottom blocks + 90px slider baseline), above.
+// No MANUAL lines are emitted; delivery needs no post-hoc visual sign-off.
 
 if (g2Fail) lastFailGate = lastFailGate || { testId: 'G2', reason: 'G2 shared template/interaction contract failed (tour naming / lighting / resetAll / panel / formula card).' };
 
