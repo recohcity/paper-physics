@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] — Multi-agent closed-loop pipeline + T5 反哺 + 门禁机器化（2026-10-10）
+
+### 多 Agent 闭环流水线（commit a4921c6）
+- 新增 `skill/sketch2sim/scripts/run-gates.mjs`：G0 卫生 → G1 追踪 → G2 公共 → G3 自定义 → G4 扰动，退出码 0/1/2/3/4
+- 新增 `skill/sketch2sim/scripts/hash-lock.mjs`：双文件（spec.json + intake-questions.md）sha256 联合哈希锁
+- 新增 `skill/sketch2sim/selftest/run-selftest.mjs`：5 坏样本自证（空心测试/哈希篡改/假物理/步骤名破坏/resetAll 残留）
+- `cases/trebuchet` 重构拆出 `src/mechanism.js` + 无头 probe(spec)（物理数值零漂移：3.843 m/s）
+- 两 case `requirements.lock` 签署，`docs/intake-questions.md` 落盘
+- 新增 `agents/roles.json`：多 Agent 角色单一数据源（各 IDE 大模型通用）
+
+### T5 反哺首跑（commit a22acfd）
+- `references/antifake-probe-discipline.md` 新建（E1-E8 带 provenance）
+- 14 个 references 文件全面复审并打 frontmatter 标签（tags + provenance）
+- template 桩接口对齐 v3 冻结契约 `constructor(world, scene, spec)` + `probe()`
+
+### G2 面板布局机器化（commit bbbc33）
+- 删除两条原 MANUAL 人工验收项（光照过曝、面板≤2行）
+- 面板检查重写为 DOM 结构判定（上下 2 区块 + 卡片式列 + 90px 滑块）
+- 光照过曝由 G2 三点光源基准机器保障
+
+### run-gates 对接 roles.json
+- `run-gates 对接 roles.json（tourSteps/exitCodes）`：tourSteps 严格序列与 exit-code 语义改为启动时从 `agents/roles.json` 读取，改 JSON 门禁自动跟随；roles.json 缺失/非法为启动期致命错误，不静默回退硬编码；exit-code 数值仍为 0-4。
+
+### 验证
+- 两 case run-gates 均 exit 0（牛顿摆 1.109 m/s、投石机 3.843 m/s，零漂移）
+- selftest 5/5 CAUGHT
+
 ## [0.8.0] — Tour stage naming unified: PHYSICS + RUN + disambiguation (2026-10-10)
 
 ### PARTS → PHYSICS alignment

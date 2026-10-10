@@ -1,0 +1,92 @@
+{
+  "version": "3.1",
+  "updated": "2026-10-10",
+  "authority": "docs/sketch2sim-multi-agent-architecture.md",
+
+  "classification": {
+    "scheduler": "Coordinator — an LLM agent that only reads state and decides who to wake; never writes code/tests/spec; persistent",
+    "executor": "T0/T1/T2/T5 agents — LLM agents that produce concrete artifacts (spec/code/tests/lessons); context destroyed after handoff",
+    "machine": "run-gates.mjs — NOT an agent; a deterministic Node script that runs G0-G4 and writes run-state.json; no LLM, no hallucination"
+  },
+
+  "trigger": {
+    "keywords": ["sketch2sim", "草图转仿真", "sketch to sim", "mechanism validation", "物理演示审计"],
+    "entry": "Coordinator reads this file and dispatches T0; every IDE / LLM injects this JSON as the single role source",
+    "ideNote": "Claude Code / Cursor / any LLM: load this JSON into context; role definitions, read/write whitelists and exit codes below are authoritative"
+  },
+
+  "tourSteps": ["SKETCH", "LIFT", "MODEL", "MATERIAL", "PHYSICS", "RUN", "REPLAY", "BUILD"],
+
+  "exitCodes": {
+    "0": "PASS - delivered, pending user acceptance sign-off",
+    "1": "A-class self-repair - wake dev agent with diagnostic summary only (≤3x)",
+    "2": "tamper detected (hash mismatch) - freeze, fatal, never release",
+    "3": "C-class deadlock (same fingerprint x3 / physical contradiction) - blockers.md, user decision",
+    "4": "B-class change - write change-log.md, re-sign requirements.lock, reset counters"
+  },
+
+  "roles": {
+    "intake": {
+      "agentType": "executor",
+      "displayName": "Agent-Intake",
+      "stage": "T0",
+      "responsibility": "Require lock: read sketch, ≤3 Q&A, write spec.json + intake-questions.md, sign requirements.lock",
+      "reads": ["public/sketch.*", "references/*", "docs/blockers.md"],
+      "writes": ["spec.json", "docs/intake-questions.md", "requirements.lock", "docs/blockers.md"],
+      "forbidden": ["src/*", "test/*", "run-state.json"],
+      "userGates": ["≤3 Q&A intake confirmation"],
+      "destroyContextAfter": true
+    },
+    "auditor": {
+      "agentType": "executor",
+      "displayName": "Agent-Auditor",
+      "stage": "T1",
+      "responsibility": "Independent test author: write test/verify.mjs (G3 assertions frozen first), sign verify.lock, sole report signer",
+      "reads": ["requirements.lock", "spec.json", "test/verify.mjs", "docs/*"],
+      "writes": ["test/verify.mjs", "test/verify.lock", "docs/report.md", "docs/verify.log"],
+      "forbidden": ["src/*", "run-state.json", "never edit implementation"],
+      "destroyContextAfter": true
+    },
+    "physics": {
+      "agentType": "executor",
+      "displayName": "Agent-Physics",
+      "stage": "T2",
+      "responsibility": "Implement src/mechanism.js + headless probe(spec); constants derived by resolveParams pure function, no hand-copied numbers",
+      "reads": ["spec.json", "requirements.lock", "test/verify.mjs"],
+      "writes": ["src/mechanism.js", "src/physics.js", "src/spec.js", "docs/mesh-roster.md"],
+      "forbidden": ["test/*", "requirements.json", "src/environment.js", "run-state.json"],
+      "destroyContextAfter": false
+    },
+    "shell": {
+      "agentType": "executor",
+      "displayName": "Agent-Shell",
+      "stage": "T2",
+      "responsibility": "Assemble 8-step Tour + resetAll() (linear+angular zeroed) + panel (90px slider, card-grid layout, global baseline alignment) + formula card",
+      "reads": ["spec.json", "src/mechanism.js", "references/visual-standards.md"],
+      "writes": ["src/main.js", "src/environment.js", "src/textures.js", "src/annotations.js", "src/style.css", "index.html", "docs/interaction-nodes.md"],
+      "forbidden": ["src/mechanism.js", "src/physics.js", "test/*", "run-state.json"],
+      "destroyContextAfter": false
+    },
+    "coordinator": {
+      "agentType": "scheduler",
+      "displayName": "Coordinator",
+      "stage": "persistent",
+      "responsibility": "State machine holder (never destroyed); dispatch T0-T5; interpret exit codes; count retries; freeze/unfreeze; route T5 evolver after user acceptance",
+      "reads": ["run-state.json", "run-gates output"],
+      "writes": ["run-state.json (via run-gates only)"],
+      "forbidden": ["never edit code/tests/spec directly"],
+      "destroyContextAfter": false
+    },
+    "evolver": {
+      "agentType": "executor",
+      "displayName": "Agent-Evolver",
+      "stage": "T5",
+      "responsibility": "Post-delivery retrospective (after user acceptance): distill cross-case lessons into references/ (tagged, provenance) and template/ (generic shell only); maintain root CHANGELOG",
+      "reads": ["cases/*/docs/blockers.md", "cases/*/docs/verify.log", "cases/*/docs/change-log.md", "references/*"],
+      "writes": ["references/*", "template/*", "SKILL.md (principles only)", "CHANGELOG.md (root)"],
+      "forbidden": ["cases/*/src/*", "cases/*/test/*", "cases/*/spec.json", "no case-specific code into template/"],
+      "destroyContextAfter": true,
+      "reviewRules": ["no duplicate", "no redundancy", "must come from a real FAIL/fix event", "must carry provenance"]
+    }
+  }
+}

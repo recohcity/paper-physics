@@ -11,12 +11,12 @@
 // Usage:
 //   node skill/sketch2sim/scripts/run-gates.mjs <caseDir>
 //
-// Exit codes (§4):
-//   0  PASS  — every gate green, delivered.
-//   1  A-class failure (implementation != requirement) — self-heal retry, count+1.
-//   2  contract broken (hash-lock mismatch / missing) — fatal freeze, user must intervene.
-//   3  C-class deadlock fuse (same error fingerprint x3) — frozen, blockers.md generated.
-//   4  B-class change channel (change-log newer than requirements.lock) — wait for re-sign.
+// Exit-code semantics (§4) and the ordered tourSteps are NOT hardcoded here.
+// Both are loaded at startup from agents/roles.json (the single authority):
+//   - roles.exitCodes -> semantic description appended to every "(exit N)" line
+//   - roles.tourSteps  -> the strict ordered tour contract checked by G2
+// Edit the JSON and the gates follow automatically. A missing/invalid JSON is a
+// fatal startup error (no silent fallback). Numeric exit codes remain 0..4.
 //
 // No third-party deps. execFileSync may shell out to: node, npx/vite.
 
@@ -32,6 +32,45 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Exit codes (kept symbolic; never redefined elsewhere).
 // ---------------------------------------------------------------------------
 const EXIT = { PASS: 0, A_FAIL: 1, CONTRACT: 2, FUSE: 3, CHANGE: 4 };
+
+// ---------------------------------------------------------------------------
+// agents/roles.json — single authority for tourSteps & exit-code semantics.
+// Contract: JSON is authoritative; if it is missing/invalid we fail LOUDLY and
+// exit non-zero. We never silently fall back to hardcoded defaults here.
+// (roles.* reads/writes/forbidden whitelists are Coordinator scheduling
+// constraints — deliberately NOT consumed by this machine referee.)
+// ---------------------------------------------------------------------------
+const ROLES_PATH = path.join(__dirname, '..', '..', '..', 'agents', 'roles.json');
+let roles;
+try {
+  roles = JSON.parse(fs.readFileSync(ROLES_PATH, 'utf8'));
+} catch (e) {
+  console.error(`run-gates: FATAL — cannot load roles.json at ${ROLES_PATH}: ${e.message}`);
+  process.exit(EXIT.CONTRACT);
+}
+{
+  const problems = [];
+  if (!Array.isArray(roles.tourSteps) || roles.tourSteps.length === 0 ||
+      !roles.tourSteps.every((s) => typeof s === 'string' && s.length > 0)) {
+    problems.push('roles.tourSteps must be a non-empty array of strings');
+  }
+  if (typeof roles.exitCodes !== 'object' || roles.exitCodes === null ||
+      !['0', '1', '2', '3', '4'].every((k) => typeof roles.exitCodes[k] === 'string' && roles.exitCodes[k].length > 0)) {
+    problems.push('roles.exitCodes must be an object with string keys "0".."4"');
+  }
+  if (problems.length > 0) {
+    console.error('run-gates: FATAL — roles.json failed contract validation:\n  ' + problems.join('\n  '));
+    process.exit(EXIT.CONTRACT);
+  }
+}
+
+// Canonical diagnostic/closure line: `=== run-gates: <STATE> (exit N) — <semantic> ===`.
+// The semantic tail comes straight from roles.exitCodes, so editing the JSON
+// description makes every gate's closing line follow automatically.
+function exitLine(state, code) {
+  const sem = roles.exitCodes[String(code)];
+  return `=== run-gates: ${state} (exit ${code})${sem ? ` — ${sem}` : ''} ===`;
+}
 
 // ---------------------------------------------------------------------------
 // Tiny reporting helpers. Each line: `<VERB>  <gate>: <detail>`.
@@ -201,7 +240,7 @@ let lastProbe = null;      // retained for blockers.md
       st.state = 'WAITING_RESIGN';
       st.frozen = false;
       saveState(st);
-      console.log(`=== run-gates: WAITING_RESIGN (exit ${EXIT.CHANGE}) ===`);
+      console.log(exitLine('WAITING_RESIGN', EXIT.CHANGE));
       process.exit(EXIT.CHANGE);
     }
   } catch {
@@ -223,7 +262,7 @@ let lastProbe = null;      // retained for blockers.md
     st.state = 'FROZEN';
     st.frozen = true;
     saveState(st);
-    console.log(`=== run-gates: FROZEN (exit ${EXIT.CONTRACT}) ===`);
+    console.log(exitLine('FROZEN', EXIT.CONTRACT));
     process.exit(EXIT.CONTRACT);
   }
 })();
@@ -354,7 +393,8 @@ const g2 = (ok, detail) => { ok ? PASS('G2', detail) : (FAIL('G2', detail), (g2F
   while ((m = re.exec(html)) !== null) {
     steps.push(m[1].replace(/<[^>]*>/g, '').trim());
   }
-  const expected = ['SKETCH', 'LIFT', 'MODEL', 'MATERIAL', 'PHYSICS', 'RUN', 'REPLAY', 'BUILD'];
+  // Expected ordered tour steps come from agents/roles.json (single authority).
+  const expected = roles.tourSteps;
   const orderOk = steps.length === expected.length && steps.every((s, i) => s === expected[i]);
   if (orderOk) {
     g2(true, `tour 8-step contract strict: ${steps.join(' -> ')}`);
@@ -664,7 +704,7 @@ if (!lastFailGate) {
   st.frozen = false;
   st.errorFingerprint = []; // a clean pass resets the consecutive-failure streak.
   saveState(st);
-  console.log(`=== run-gates: PASS (exit ${EXIT.PASS}) ===`);
+  console.log(exitLine('PASS', EXIT.PASS));
   process.exit(EXIT.PASS);
 }
 
@@ -679,12 +719,12 @@ if (st.errorFingerprint[st.errorFingerprint.length - 1].count >= 3) {
   saveState(st);
   writeBlockers(st, lastFailGate.testId, lastFailGate.reason, lastProbe);
   console.error(`FUSE: same error fingerprint consecutive 3x (${fsha}) — froze, see docs/blockers.md`);
-  console.log(`=== run-gates: FROZEN_DEADLOCK (exit ${EXIT.FUSE}) ===`);
+  console.log(exitLine('FROZEN_DEADLOCK', EXIT.FUSE));
   process.exit(EXIT.FUSE);
 }
 
 st.state = 'SELF_HEALING';
 st.frozen = false;
 saveState(st);
-console.log(`=== run-gates: SELF_HEALING (exit ${EXIT.A_FAIL}) ===`);
+console.log(exitLine('SELF_HEALING', EXIT.A_FAIL));
 process.exit(EXIT.A_FAIL);

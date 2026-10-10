@@ -8,6 +8,33 @@ The deliverable is not a pretty model; it is a **checkable specification** and a
 
 ---
 
+## Multi-agent workflow (any IDE / LLM)
+
+This skill runs as a role-separated pipeline. The **single machine-readable source of truth
+for all agent roles** is [`agents/roles.json`](../../agents/roles.json) — load it into
+context in Claude Code, Cursor, or any LLM, and the dispatch contract is:
+
+| Type | Stage | Role | Writes (only) |
+|---|---|---|---|
+| 🟠 **scheduler**（调度型 agent · 常驻） | — | Coordinator | 只调度不写代码；`run-state.json` 由机器写 |
+| 🟣 **executor**（执行型 agent · 用完即销毁） | T0 | Agent-Intake | `spec.json`, `docs/intake-questions.md`, `requirements.lock` |
+| 🟣 executor | T1 | Agent-Auditor | `test/verify.mjs`, `docs/report.md` |
+| 🟣 executor | T2 | Agent-Physics / Agent-Shell | `src/mechanism.js`, `src/main.js`, `index.html` |
+| 🟢 **machine**（确定性脚本 · 非 agent） | T3 | run-gates.mjs | `run-state.json` only |
+| 🟣 executor | T5 | Agent-Evolver | `references/`, `template/`, root `CHANGELOG.md` |
+
+> `run-gates.mjs` 的 `tourSteps` / `exitCodes` 直接引用 `agents/roles.json`，改 JSON 门禁自动跟随。
+
+**三类身份一句话**：
+- **scheduler** = LLM，读状态、做调度决策，不亲手写代码，常驻不销毁；
+- **executor** = LLM，写具体产物（spec / 代码 / 测试 / 经验），用完即销毁；
+- **machine** = 纯 Node 脚本，无幻觉，跑 G0-G4 检查并写 `run-state.json`。
+
+Trigger keywords: `sketch2sim`, `草图转仿真`, `mechanism validation`.
+Authority doc: `docs/sketch2sim-multi-agent-architecture.md` (v3).
+
+---
+
 ## Why this exists
 
 Most physics tools require CAD software or hundreds of lines of setup code. sketch2sim
