@@ -52,3 +52,6 @@ cases/archive/
 cases/*/node_modules/
 cases/*/dist/
 cases/*/.env*
+
+# Gate runtime state (machine-written, not for repo)
+cases/*/run-state.json
