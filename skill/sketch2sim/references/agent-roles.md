@@ -1,3 +1,8 @@
+---
+tags: [T0, T1, T2, T3, T4, T5, G0-G4, agent_roles, handoff, exit_code]
+provenance: docs/sketch2sim-multi-agent-architecture.md v3 §2（多 Agent 角色矩阵）
+---
+
 # sketch2sim 多 Agent 角色分工与执行协议（agent-roles）
 
 > **权威来源**：`docs/sketch2sim-multi-agent-architecture.md` v2 §2.1 / §2.2 / §2.3 与修订说明 §1~§3。

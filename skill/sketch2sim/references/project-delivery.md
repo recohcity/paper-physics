@@ -1,3 +1,8 @@
+---
+tags: [T2, step5-11, tour_naming, shell, formula_card, resetAll, lobby]
+provenance: cases/trebuchet（参考构建）+ cases/newton-cradle（v2 精修）
+---
+
 # Project delivery: from sketch to a runnable interactive app
 
 This file defines WHAT gets delivered and HOW a new sketch project is scaffolded. The goal: the user

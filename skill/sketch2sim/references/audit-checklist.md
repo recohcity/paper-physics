@@ -1,3 +1,8 @@
+---
+tags: [T3, T4, T5, G1, G3, G4, audit, self_check]
+provenance: cases/trebuchet（audit V2-V5 修复）+ cases/newton-cradle
+---
+
 # Audit checklist
 
 Use when building a new model (as a self-check) or auditing an existing one. Severity: **B** blocks any

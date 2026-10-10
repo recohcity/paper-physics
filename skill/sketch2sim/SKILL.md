@@ -274,7 +274,9 @@ Same Spec, reduced fidelity: one sketch, simplified physics, no cross-check. Del
 - `visual-standards.md` — **canonical lighting rig, desk material, panel layout, banner, physics card** — copy verbatim to every new case
 - `case-onboarding.md` — pre-build, during-build, visual, reset, lobby integration, delivery checklist
 - `audit-checklist.md` — checkable items for building or auditing
-- `template/` — the reusable Vite shell. Lighting, desk, and no-op banner are pre-configured to visual-standards. Each project writes its mechanism, spec, annotations and textures.
+- `antifake-probe-discipline.md` — G1/G3/G4 authoring rules: spec single-source, resolveParams pure fn, hardcode detection direction + physics-constant whitelist, headless probe contract, requirements-first verify chain, resetAll linear+angular, hash-lock exit codes
+- `agent-roles.md` / `deadlock-protocol.md` — multi-agent role matrix (T0–T5) and B/C-class change/fuse protocol
+- `template/` — the reusable Vite shell. Lighting, desk, and no-op banner are pre-configured to visual-standards. The `Mechanism` stub exposes the frozen `(world, scene, spec)` + `probe()` contract. Each project writes its mechanism, spec, annotations and textures.
 
 ## Status (honest)
 

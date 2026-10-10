@@ -43,7 +43,10 @@ const cleanPaperTex = createCleanPaperTexture();
 const env = new Environment(scene, woodTex, cleanPaperTex, cleanPaperTex);
 
 // ---- mechanism (project-specific) ----
-const mech = new Mechanism(scene, spec);
+// Frozen contract: (world, scene, spec). Pass world=null here — the mechanism
+// owns its own CANNON.World (built internally for the live shell AND rebuilt in
+// probe() for headless tests). See template/src/mechanism.js.
+const mech = new Mechanism(null, scene, spec);
 
 // ---- camera views ----
 const views = {

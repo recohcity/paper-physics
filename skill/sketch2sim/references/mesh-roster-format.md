@@ -1,3 +1,8 @@
+---
+tags: [T2, step6, mesh_roster, collider, static_prop, no_pass_through]
+provenance: cases/newton-cradle（无穿透反复踩坑）
+---
+
 # Mesh Roster Format
 
 Every case's `docs/mesh-roster.md` must classify **every mesh** in the GLB into

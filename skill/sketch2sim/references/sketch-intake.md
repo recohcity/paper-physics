@@ -1,3 +1,8 @@
+---
+tags: [T0, step0, step1, step2, intake, scale_anchor, ambiguity, recognition]
+provenance: 历史经验（sketch 端到端流程，尚未被真实草图压测）
+---
+
 # Sketch intake (workflow steps 0-2)
 
 This is the step the skill never had a real procedure for: every case run so far used

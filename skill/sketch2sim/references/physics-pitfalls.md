@@ -1,3 +1,8 @@
+---
+tags: [T2, T3, T4, step0-11, engine, modeling, ux, resetAll, lighting]
+provenance: cases/trebuchet（#1-#36）+ cases/newton-cradle（#37-#45）
+---
+
 # Physics pitfalls
 
 General engine, modeling and UX rules. Each states the failure, the general fix, and how to check it.

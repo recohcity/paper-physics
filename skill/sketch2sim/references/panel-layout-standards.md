@@ -1,3 +1,8 @@
+---
+tags: [T2, step8, G2, panel, slider_90px, tour, card_map]
+provenance: cases/newton-cradle（构建面板 15+ 次返工）
+---
+
 # Build Panel Layout Standards
 
 Every custom model case has a build panel. These rules come from Newton's Cradle

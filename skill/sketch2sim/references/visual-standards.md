@@ -1,3 +1,8 @@
+---
+tags: [T2, step10, G2, lighting, environment, camera, sketch_normalize, formula_card]
+provenance: cases/newton-cradle（#37-#43 标准化光照/相机沉淀）
+---
+
 # Visual Standards
 
 All cases share the same warm desk look. **Copy these values verbatim** — do not re-derive.

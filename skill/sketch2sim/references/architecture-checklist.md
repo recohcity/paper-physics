@@ -1,3 +1,8 @@
+---
+tags: [T2, G0, G4, hardcode, single_source, resolveParams, refactor_zero_drift]
+provenance: 历史 audit 经验 + cases/trebuchet（mechanism.js 重构物理零漂移事件）
+---
+
 # Architecture checklist (code quality for interactive physics builds)
 
 Use when building or refactoring a sketch-to-sim interactive project (3D renderer +

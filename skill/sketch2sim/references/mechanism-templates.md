@@ -1,3 +1,8 @@
+---
+tags: [T3, G3, rigid_linkage, field_force, track_guided, control, domain, gate_shape]
+provenance: cases/trebuchet（rigid_linkage）+ 历史 field_force 单调场存在性证明案例
+---
+
 # Physics-domain modules（物理域模块）
 
 入口开放：任何草图都能进入通用管线（识别 → 白模 → 材质 → 物理 → 交互，还原分级见

@@ -1,3 +1,8 @@
+---
+tags: [T4, T5, G3, deadlock, fuse, requirements_lock, run_state]
+provenance: docs/sketch2sim-multi-agent-architecture.md v3 §5（B/C 类熔断协议）
+---
+
 # sketch2sim 需求变更与死循环熔断协议（deadlock-protocol）
 
 > **权威来源**：`docs/sketch2sim-multi-agent-architecture.md` v2 §5.1 / §5.2 / §2.3.2 与修订说明 §1 / §3。

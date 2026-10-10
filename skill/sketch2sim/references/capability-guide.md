@@ -1,3 +1,8 @@
+---
+tags: [T0, capability, restore_level, rigid_linkage, field_force, track_guided, control]
+provenance: 历史经验（skill 核心定位，L0-L5 还原分级）
+---
+
 # Capability guide (what this skill can and cannot validate)
 
 Read this before handing a new sketch to the workflow — it decides fast whether this skill is the right

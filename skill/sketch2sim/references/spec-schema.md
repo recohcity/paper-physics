@@ -1,3 +1,8 @@
+---
+tags: [T0, T2, spec_json, provenance, scale, single_source]
+provenance: cases/trebuchet + cases/newton-cradle（spec.json 单一源派生）
+---
+
 # Spec schema v0
 
 One JSON file describes the design. Sketch textures, 3D geometry, physics bodies, UI ranges and the report

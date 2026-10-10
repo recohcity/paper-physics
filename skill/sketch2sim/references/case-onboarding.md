@@ -1,3 +1,8 @@
+---
+tags: [T5, step11, gate, lobby, resetAll, template, audit_case]
+provenance: cases/newton-cradle（交付 onboarding 沉淀）
+---
+
 # Case Onboarding Checklist
 
 When a new case is finished, **first run the mechanical gate**:
