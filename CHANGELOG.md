@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] — roles.json v3.2 多Agent角色修订 + 移除 sketch2physics 实验线（2026-10-13）
+
+### agents/roles.json v3.2（7 处微差修订，v3.1 → v3.2）
+- 新增顶层 `pathBase`：统一路径解析基准（裸文件名 → `cases/<slug>/`；`skill/*`、`CHANGELOG.md` → 仓库根）
+- intake 补齐职责：C 类熔断（Exit 3）生成 `blockers.md` 向用户抉择 + B 类变更（Exit 4）重签 `requirements.lock`；`userGates` 扩为 3 条，与 3 处人工介入节点一一对应
+- evolver 读/写路径统一为 `skill/sketch2sim/...` 全路径；`reviewRules` 补「熔断事件」来源（对齐四原则之「有价值」）
+- 新增 `roles.machine` 条目（stage T3）：run-gates 的读/写白名单结构化为机器可读
+- `classification.executor` 文案与 destroyContextAfter 对齐（T0/T1/T5 销毁，T2 常驻服务验收打磨闭环）
+- 架构文档同步（docs/ 为本地忽略目录，不进仓库）：CHANGELOG 归属统一到项目根
+
+### 移除 sketch2physics 实验工作线
+- 删除分支 `feat/sketch2physics`（本地 + 远端）
+- 随之移除 `skill/sketch2physics`（实验性融合 skill）与 `cases/mini-marble-machine`（归档案例冻结）
+- 主线收敛回 sketch2sim（`skill/sketch2sim` + `cases/trebuchet` + `cases/newton-cradle` + `cases/lobby`）
+
+### 验证
+- main 工作区仅含 `agents/roles.json`（v3.2）与本次 CHANGELOG 改动
+- `agents/roles.json` 通过 JSON 解析校验
+
 ## [0.9.0] — Multi-agent closed-loop pipeline + T5 反哺 + 门禁机器化（2026-10-10）
 
 ### 多 Agent 闭环流水线（commit a4921c6）

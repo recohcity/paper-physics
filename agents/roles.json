@@ -1,12 +1,13 @@
 {
-  "version": "3.1",
-  "updated": "2026-10-10",
+  "version": "3.2",
+  "updated": "2026-10-13",
   "authority": "docs/sketch2sim-multi-agent-architecture.md",
+  "pathBase": "Paths resolve from the repository root (the folder containing cases/ and skill/). Bare artifact names (spec.json, src/*, test/*, docs/*, public/sketch.*, requirements.lock, run-state.json) mean the active case directory cases/<slug>/; skill/sketch2sim/* and CHANGELOG.md mean the repository root. Every path in reads/writes/forbidden follows one of these two bases.",
 
   "classification": {
     "scheduler": "Coordinator — an LLM agent that only reads state and decides who to wake; never writes code/tests/spec; persistent",
-    "executor": "T0/T1/T2/T5 agents — LLM agents that produce concrete artifacts (spec/code/tests/lessons); context destroyed after handoff",
-    "machine": "run-gates.mjs — NOT an agent; a deterministic Node script that runs G0-G4 and writes run-state.json; no LLM, no hallucination"
+    "executor": "T0/T1/T2/T5 agents — LLM agents that produce concrete artifacts (spec/code/tests/lessons); T0/T1/T5 context destroyed after handoff; T2 (physics/shell) kept alive across the acceptance polish loop per destroyContextAfter flag",
+    "machine": "run-gates.mjs — NOT an LLM agent; a deterministic Node script that runs G0-G4 and writes run-state.json; no hallucination; structured whitelist in roles.machine (stage T3)"
   },
 
   "trigger": {
@@ -30,11 +31,11 @@
       "agentType": "executor",
       "displayName": "Agent-Intake",
       "stage": "T0",
-      "responsibility": "Require lock: read sketch, ≤3 Q&A, write spec.json + intake-questions.md, sign requirements.lock",
-      "reads": ["public/sketch.*", "references/*", "docs/blockers.md"],
+      "responsibility": "Require lock: read sketch, ≤3 Q&A, write spec.json + intake-questions.md, sign requirements.lock; C-class deadlock (Exit 3): write docs/blockers.md and ask user to choose; B-class change (Exit 4): re-edit spec.json + intake-questions.md and re-sign requirements.lock",
+      "reads": ["public/sketch.*", "skill/sketch2sim/references/*", "docs/blockers.md"],
       "writes": ["spec.json", "docs/intake-questions.md", "requirements.lock", "docs/blockers.md"],
       "forbidden": ["src/*", "test/*", "run-state.json"],
-      "userGates": ["≤3 Q&A intake confirmation"],
+      "userGates": ["≤3 Q&A intake confirmation", "C-class deadlock → blockers.md user decision (Exit 3)", "B-class change → re-sign requirements.lock (Exit 4)"],
       "destroyContextAfter": true
     },
     "auditor": {
@@ -81,12 +82,22 @@
       "agentType": "executor",
       "displayName": "Agent-Evolver",
       "stage": "T5",
-      "responsibility": "Post-delivery retrospective (after user acceptance): distill cross-case lessons into references/ (tagged, provenance) and template/ (generic shell only); maintain root CHANGELOG",
-      "reads": ["cases/*/docs/blockers.md", "cases/*/docs/verify.log", "cases/*/docs/change-log.md", "references/*"],
-      "writes": ["references/*", "template/*", "SKILL.md (principles only)", "CHANGELOG.md (root)"],
+      "responsibility": "Post-delivery retrospective (after user acceptance): distill cross-case lessons into skill/sketch2sim/references/ (tagged, provenance) and skill/sketch2sim/template/ (generic shell only); maintain root CHANGELOG",
+      "reads": ["cases/*/docs/blockers.md", "cases/*/docs/verify.log", "cases/*/docs/change-log.md", "skill/sketch2sim/references/*"],
+      "writes": ["skill/sketch2sim/references/*", "skill/sketch2sim/template/*", "skill/sketch2sim/SKILL.md (principles only)", "CHANGELOG.md (repository root)"],
       "forbidden": ["cases/*/src/*", "cases/*/test/*", "cases/*/spec.json", "no case-specific code into template/"],
       "destroyContextAfter": true,
-      "reviewRules": ["no duplicate", "no redundancy", "must come from a real FAIL/fix event", "must carry provenance"]
+      "reviewRules": ["no duplicate", "no redundancy", "must come from a real FAIL/fix or C-class meltdown event", "must carry provenance"]
+    },
+    "machine": {
+      "agentType": "machine",
+      "displayName": "run-gates.mjs",
+      "stage": "T3",
+      "responsibility": "Deterministic Node judge (no LLM, no hallucination): run G0 hygiene → G1 traceability → G2 common template → G3 custom physics → G4 perturbation; compute error fingerprints; write run-state.json; output exit codes 0/1/2/3/4",
+      "reads": ["** (all project files, read-only)"],
+      "writes": ["run-state.json (sole writer)"],
+      "forbidden": [],
+      "destroyContextAfter": false
     }
   }
 }
